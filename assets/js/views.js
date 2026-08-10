@@ -138,6 +138,7 @@
         <div><h1>Students</h1><p>${Store.students.length} enrolled · click a row to view fees & the dashboard</p></div>
         <div class="flex gap">
           <button class="btn" id="expStudents">⬇ Export CSV</button>
+          <button class="btn" id="importBtn">⬆ Import CSV</button>
           <button class="btn primary" id="addStudentBtn">＋ Add Student</button>
         </div>
       </div>
@@ -208,8 +209,102 @@
     $('#stuSort').onchange = e => { studentsState.sort = e.target.value; apply(); };
     $('#expStudents').onclick = exportStudentsCSV;
     $('#addStudentBtn').onclick = openAddStudentModal;
+    $('#importBtn').onclick = openImportModal;
     bindNav();
     apply();
+  }
+
+  /* -------------------------------------------------- Bulk import (CSV) */
+  // Import column headers (also used for the downloadable template)
+  const IMPORT_COLS = ['Student ID', 'Name', 'Grade', 'Class Teacher', 'Gender', 'Date of Birth',
+    'Father Name', 'Mother Name', 'Contact Number', 'Location', 'Transport', 'Bus/Driver',
+    'Religion', 'Discount %', 'Admission', 'Sports Activity', 'Previous School',
+    'Terms Fees', 'School Supplies', 'App Fees Paid', 'Uniform & Accessories',
+    'Transport Fees', 'Extra Curricular Fees', 'Evening Sports'];
+  function headerToKey(h) {
+    const n = String(h).trim().toLowerCase().replace(/\s+/g, ' ');
+    const map = {
+      'student id': 'id', 'id': 'id', 'name': 'name', 'student name': 'name', 'grade': 'grade',
+      'class teacher': 'classTeacher', 'gender': 'gender', 'date of birth': 'dob', 'dob': 'dob',
+      'father name': 'father', 'father': 'father', 'mother name': 'mother', 'mother': 'mother',
+      'contact number': 'contact', 'contact': 'contact', 'phone': 'contact', 'location': 'location',
+      'location (from)': 'location', 'transport': 'transportType', 'transport (own/school)': 'transportType',
+      'bus/driver': 'vehicle', 'bus / driver': 'vehicle', 'vehicle': 'vehicle', 'religion': 'religion',
+      'discount %': 'discountpct', 'discount(%)': 'discountpct', 'discount': 'discountpct',
+      'admission': 'admission', 'sports activity': 'sportsActivity', 'previous school': 'prevSchool'
+    };
+    if (map[n]) return map[n];
+    // fee heads by label
+    for (const k of Store.HEAD_ORDER) if (Store.HEAD_LABELS[k].toLowerCase() === n) return 'fee:' + k;
+    return null;
+  }
+
+  function openImportModal() {
+    const root = document.getElementById('modalRoot');
+    root.innerHTML = `
+      <div class="modal-backdrop" id="imBackdrop"><div class="modal wide">
+        <div class="modal-head"><h3>Import Students from CSV</h3><button class="x-close" id="imClose">&times;</button></div>
+        <div class="modal-body">
+          <ol class="muted" style="font-size:13px;line-height:1.8;margin:0 0 12px;padding-left:18px">
+            <li>In Excel/Google Sheets, save your list as <b>CSV</b> (File → Save As / Download → CSV).</li>
+            <li>Use these column headers (order doesn't matter; extra columns are ignored):</li>
+          </ol>
+          <div class="table-scroll" style="max-height:90px;border:1px solid var(--border);border-radius:8px;padding:8px;font-size:12px;margin-bottom:6px">${IMPORT_COLS.map(c => '<span class="badge gray" style="margin:2px">' + U.esc(c) + '</span>').join('')}</div>
+          <p class="muted" style="font-size:12px;margin:0 0 14px">Student ID is optional — blank IDs get auto‑numbered. Duplicate IDs are skipped. Fee columns are the total amount for each category (blank/0 = not applied).</p>
+          <div class="flex gap wrap">
+            <button class="btn sm" id="imTemplate">⬇ Download CSV template</button>
+            <label class="btn sm primary" style="cursor:pointer">Choose CSV file…<input type="file" id="imFile" accept=".csv,text/csv" class="hidden"/></label>
+          </div>
+          <div id="imResult" style="margin-top:14px"></div>
+        </div>
+        <div class="modal-foot"><button class="btn" id="imCancel">Close</button></div>
+      </div></div>`;
+    const close = () => { root.innerHTML = ''; };
+    $('#imClose', root).onclick = close; $('#imCancel', root).onclick = close;
+    $('#imBackdrop', root).onclick = e => { if (e.target.id === 'imBackdrop') close(); };
+    $('#imTemplate', root).onclick = () => {
+      const example = ['26270480', 'RIYAN AHMED', 'VI', 'RAGAVI', 'BOY', '2015-06-01', 'ABDUL AHMED',
+        'FATHIMA', '9000000000', 'PATHAMADAI', 'SCHOOL', 'TN72 BUS 1', 'MUSLIM', '0', 'NEW', 'CRICKET',
+        'AKB SCHOOL', '36000', '22500', '0', '5350', '8000', '0', '0'];
+      U.download('akb_student_import_template.csv', U.toCSV([IMPORT_COLS, example]), 'text/csv');
+    };
+    $('#imFile', root).onchange = (e) => {
+      const f = e.target.files[0]; if (!f) return;
+      const rd = new FileReader();
+      rd.onload = async () => {
+        try {
+          const rows = U.fromCSV(rd.result);
+          if (rows.length < 2) { $('#imResult', root).innerHTML = '<div class="badge red">No data rows found.</div>'; return; }
+          const keys = rows[0].map(headerToKey);
+          if (keys.indexOf('name') < 0) { $('#imResult', root).innerHTML = '<div class="badge red">A “Name” column is required.</div>'; return; }
+          $('#imResult', root).innerHTML = '<div class="muted">Importing ' + (rows.length - 1) + ' rows…</div>';
+          let added = 0, skipped = 0; const errs = [];
+          for (let r = 1; r < rows.length; r++) {
+            const row = rows[r]; if (!row.some(c => (c || '').trim())) continue;
+            const data = { fees: {} };
+            keys.forEach((key, ci) => {
+              if (!key) return; const val = (row[ci] || '').trim();
+              if (key.startsWith('fee:')) data.fees[key.slice(4)] = Number(val) || 0;
+              else data[key] = val;
+            });
+            if (data.discountpct != null) { const p = parseFloat(data.discountpct); data.discount = isNaN(p) ? 0 : (p > 1 ? p / 100 : p); delete data.discountpct; }
+            if (!data.name) { errs.push('Row ' + (r + 1) + ': missing name'); continue; }
+            if (!data.id) data.id = Store.suggestId();
+            try { await Store.addStudent(data); added++; }
+            catch (ex) { if (/already exists/.test(ex.message)) skipped++; else errs.push('Row ' + (r + 1) + ': ' + ex.message); }
+          }
+          $('#imResult', root).innerHTML =
+            `<div class="panel" style="margin:0"><div class="panel-body pad">
+              <div><span class="badge green">${added} added</span> ${skipped ? '<span class="badge amber">' + skipped + ' skipped (duplicate ID)</span>' : ''} ${errs.length ? '<span class="badge red">' + errs.length + ' errors</span>' : ''}</div>
+              ${errs.length ? '<div class="muted" style="font-size:12px;margin-top:8px;max-height:120px;overflow:auto">' + errs.slice(0, 50).map(U.esc).join('<br>') + '</div>' : ''}
+              <button class="btn sm primary mt" id="imDone">Done</button>
+            </div></div>`;
+          U.toast(added + ' students imported', 'success');
+          $('#imDone', root).onclick = () => { close(); students(); };
+        } catch (err) { $('#imResult', root).innerHTML = '<div class="badge red">Could not read file: ' + U.esc(err.message) + '</div>'; }
+      };
+      rd.readAsText(f);
+    };
   }
 
   /* -------------------------------------------------- Add student modal */
