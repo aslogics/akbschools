@@ -170,7 +170,13 @@
         const amt = Number(it.amount) || 0; if (amt <= 0) return;
         const biz = HEAD_BUSINESS[it.head] || 'school';
         (groups[biz] = groups[biz] || []).push({ head: it.head, label: HEAD_LABELS[it.head] || it.head, amount: amt });
-        const h = student.fees[it.head]; if (h) h.paid = (Number(h.paid) || 0) + amt;
+        const h = student.fees[it.head];
+        if (h) {
+          h.paid = (Number(h.paid) || 0) + amt;
+          // ad-hoc fee (e.g. student newly joins Evening Sports/an event): bill it
+          // on the spot so the balance never goes negative.
+          h.total = Math.max(Number(h.total) || 0, h.paid);
+        }
       });
       this.recompute(student);
 

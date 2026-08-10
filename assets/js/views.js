@@ -524,17 +524,20 @@
   function openPaymentModal(studentId) {
     const s = Store.getStudent(studentId); if (!s) return;
     const root = document.getElementById('modalRoot');
-    const heads = Store.HEAD_ORDER.filter(k => { const h = s.fees[k]; return h && (h.total > 0 || h.paid > 0); });
-    const rows = heads.map(k => {
-      const h = s.fees[k]; const paidoff = h.balance <= 0;
+    // show ALL fee categories so staff can collect an ad-hoc fee (e.g. a
+    // student newly joining Evening Sports or an event), even if it was never
+    // applied to this student.
+    const rows = Store.HEAD_ORDER.map(k => {
+      const h = s.fees[k]; const due = h.balance > 0;
       const B = Store.BUSINESSES[Store.businessOfHead(k)];
-      return `<div class="fee-row ${paidoff ? 'paidoff' : ''}">
-        <input type="checkbox" class="fh-chk" data-head="${k}" ${!paidoff ? 'checked' : ''} ${paidoff ? 'disabled' : ''}/>
-        <div><div class="fh-label">${U.esc(h.label)}</div><div class="muted" style="font-size:11px">${U.esc(B.name)} · Paid ${U.inr(h.paid)} of ${U.inr(h.total)}</div></div>
+      const status = h.total > 0 ? `Paid ${U.inr(h.paid)} of ${U.inr(h.total)}` : 'Not applied — tick to add & collect';
+      return `<div class="fee-row ${due ? '' : 'paidoff'}">
+        <input type="checkbox" class="fh-chk" data-head="${k}" ${due ? 'checked' : ''}/>
+        <div><div class="fh-label">${U.esc(h.label)}</div><div class="muted" style="font-size:11px">${U.esc(B.name)} · ${status}</div></div>
         <div class="fh-bal">Bal ${U.inr(h.balance)}</div>
-        <input type="number" class="fh-amt" data-head="${k}" min="0" step="1" value="${paidoff ? 0 : Math.max(0, h.balance)}" ${paidoff ? 'disabled' : ''}/>
+        <input type="number" class="fh-amt" data-head="${k}" min="0" step="1" value="${due ? Math.max(0, h.balance) : 0}" ${due ? '' : 'disabled'}/>
       </div>`;
-    }).join('') || '<div class="empty">This student has no outstanding fee heads.</div>';
+    }).join('');
     root.innerHTML = `
       <div class="modal-backdrop" id="payBackdrop"><div class="modal">
         <div class="modal-head"><h3>Receive Payment — ${U.esc(s.name)}</h3><button class="x-close" id="payClose">&times;</button></div>
