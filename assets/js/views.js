@@ -136,7 +136,10 @@
     view().innerHTML = `
       <div class="page-head">
         <div><h1>Students</h1><p>${Store.students.length} enrolled · click a row to view fees & the dashboard</p></div>
-        <button class="btn" id="expStudents">⬇ Export CSV</button>
+        <div class="flex gap">
+          <button class="btn" id="expStudents">⬇ Export CSV</button>
+          <button class="btn primary" id="addStudentBtn">＋ Add Student</button>
+        </div>
       </div>
       <div class="cards">
         ${kpi('Students', Store.students.length, { accent: 'blue' })}
@@ -204,8 +207,67 @@
     $('#stuStatus').onchange = e => { studentsState.status = e.target.value; apply(); };
     $('#stuSort').onchange = e => { studentsState.sort = e.target.value; apply(); };
     $('#expStudents').onclick = exportStudentsCSV;
+    $('#addStudentBtn').onclick = openAddStudentModal;
     bindNav();
     apply();
+  }
+
+  /* -------------------------------------------------- Add student modal */
+  function openAddStudentModal() {
+    const root = document.getElementById('modalRoot');
+    const feeInputs = Store.HEAD_ORDER.map(k => {
+      const B = Store.BUSINESSES[Store.businessOfHead(k)];
+      return `<div class="fee-row" style="grid-template-columns:1.4fr 1fr">
+        <div><div class="fh-label">${U.esc(Store.HEAD_LABELS[k])}</div><div class="muted" style="font-size:11px">${U.esc(B.name)}</div></div>
+        <input type="number" min="0" step="1" data-fee="${k}" value="0" title="Total fee"/>
+      </div>`;
+    }).join('');
+    root.innerHTML = `
+      <div class="modal-backdrop" id="asBackdrop"><div class="modal wide">
+        <div class="modal-head"><h3>Add Student</h3><button class="x-close" id="asClose">&times;</button></div>
+        <div class="modal-body">
+          <h4 class="sec">Details</h4>
+          <div class="grid2">
+            ${textField('Student Name *', 'name', '')}
+            ${textField('Student ID *', 'id', Store.suggestId())}
+            ${textField('Grade', 'grade', '')}
+            ${textField('Class Teacher', 'classTeacher', '')}
+            ${textField('Gender', 'gender', '')}
+            ${textField('Date of Birth', 'dob', '')}
+            ${textField('Father Name', 'father', '')}
+            ${textField('Mother Name', 'mother', '')}
+            ${textField('Contact Number', 'contact', '')}
+            ${textField('Location (From)', 'location', '')}
+            ${textField('Transport (Own/School)', 'transportType', '')}
+            ${textField('Bus / Driver', 'vehicle', '')}
+            ${textField('Religion', 'religion', '')}
+            ${textField('Discount (%)', 'discountpct', '')}
+            ${textField('Sports Activity', 'sportsActivity', '')}
+            ${textField('Admission (OLD/NEW)', 'admission', 'NEW')}
+          </div>
+          <h4 class="sec">Fee Amounts (total for each category)</h4>
+          <div class="muted" style="font-size:12px;margin-bottom:6px">Leave 0 for any category that doesn't apply — you can still collect it later.</div>
+          ${feeInputs}
+        </div>
+        <div class="modal-foot"><button class="btn" id="asCancel">Cancel</button><button class="btn primary" id="asSave">Add Student</button></div>
+      </div></div>`;
+    const close = () => { root.innerHTML = ''; };
+    $('#asClose', root).onclick = close; $('#asCancel', root).onclick = close;
+    $('#asBackdrop', root).onclick = e => { if (e.target.id === 'asBackdrop') close(); };
+    $('#asSave', root).onclick = async () => {
+      const get = f => { const el = $(`[data-f="${f}"]`, root); return el ? el.value.trim() : ''; };
+      const data = {};
+      ['name', 'id', 'grade', 'classTeacher', 'gender', 'dob', 'father', 'mother', 'contact',
+        'location', 'transportType', 'vehicle', 'religion', 'sportsActivity', 'admission'].forEach(f => data[f] = get(f));
+      const pct = parseFloat(get('discountpct')); data.discount = isNaN(pct) ? 0 : pct / 100;
+      data.fees = {};
+      $$('[data-fee]', root).forEach(inp => data.fees[inp.dataset.fee] = Number(inp.value) || 0);
+      try {
+        const s = await Store.addStudent(data);
+        close(); U.toast('Student added · ' + s.name, 'success');
+        location.hash = '#/student/' + encodeURIComponent(s.id);
+      } catch (e) { U.toast(e.message, 'error'); }
+    };
   }
 
   function exportStudentsCSV() {

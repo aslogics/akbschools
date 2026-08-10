@@ -243,6 +243,40 @@
         .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
     },
 
+    /* ---- students: add ---- */
+    suggestId() {
+      const nums = this.students.map(s => String(s.id).replace(/\D/g, '')).filter(Boolean);
+      if (!nums.length) return '25260001';
+      // use the most common id length so a stray long/short id doesn't skew it
+      const byLen = {};
+      nums.forEach(n => { byLen[n.length] = (byLen[n.length] || 0) + 1; });
+      const modeLen = Object.keys(byLen).sort((a, b) => byLen[b] - byLen[a])[0];
+      let max = 0;
+      nums.forEach(n => { if (String(n.length) === modeLen) { const v = parseInt(n, 10); if (v > max) max = v; } });
+      return String(max + 1);
+    },
+    async addStudent(data) {
+      const id = String(data.id || '').trim();
+      if (!id) throw new Error('Student ID is required');
+      if (this.getStudent(id)) throw new Error('Student ID "' + id + '" already exists');
+      if (!data.name || !String(data.name).trim()) throw new Error('Student name is required');
+      const fees = {};
+      HEAD_ORDER.forEach(k => {
+        const total = Number((data.fees && data.fees[k]) || 0) || 0;
+        fees[k] = { label: HEAD_LABELS[k], total, paid: 0, balance: total };
+      });
+      const s = {
+        id, name: String(data.name).trim(), grade: data.grade || '', classTeacher: data.classTeacher || '',
+        gender: data.gender || '', dob: data.dob || '', age: data.age || '', prevSchool: data.prevSchool || '',
+        father: data.father || '', mother: data.mother || '', location: data.location || '', dropLocation: data.dropLocation || '',
+        transportType: data.transportType || '', vehicle: data.vehicle || '', contact: data.contact || '',
+        religion: data.religion || '', discount: Number(data.discount) || 0, admission: data.admission || 'NEW',
+        sportsActivity: data.sportsActivity || '', marks: { english: '', maths: '', science: '' }, fees
+      };
+      await this.saveStudent(s);
+      return s;
+    },
+
     /* ---- students: edit ---- */
     async saveStudent(s) {
       this.recompute(s);
