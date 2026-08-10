@@ -351,6 +351,27 @@ window.__AKB_SEED__ = {"school": "AKB School of Excellence", "year": "2026-2027"
     setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 200);
   }
 
+  // Parse CSV text into an array of row-arrays (handles quotes, commas, newlines)
+  function fromCSV(text) {
+    const rows = []; let cur = [], field = '', inq = false;
+    text = String(text).replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+    if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1); // strip BOM
+    for (let i = 0; i < text.length; i++) {
+      const c = text[i];
+      if (inq) {
+        if (c === '"') { if (text[i + 1] === '"') { field += '"'; i++; } else inq = false; }
+        else field += c;
+      } else {
+        if (c === '"') inq = true;
+        else if (c === ',') { cur.push(field); field = ''; }
+        else if (c === '\n') { cur.push(field); rows.push(cur); cur = []; field = ''; }
+        else field += c;
+      }
+    }
+    cur.push(field); rows.push(cur);
+    return rows.filter(r => !(r.length === 1 && r[0].trim() === ''));
+  }
+
   function toCSV(rows) {
     return rows.map(r => r.map(c => {
       c = c == null ? '' : String(c);
@@ -372,7 +393,7 @@ window.__AKB_SEED__ = {"school": "AKB School of Excellence", "year": "2026-2027"
     return 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
   }
 
-  w.U = { inr, inum, esc, initials, todayISO, fmtDate, inWords, debounce, download, toCSV, toast, uid };
+  w.U = { inr, inum, esc, initials, todayISO, fmtDate, inWords, debounce, download, toCSV, fromCSV, toast, uid };
 })(window);
 
 </script>
@@ -622,6 +643,40 @@ window.__AKB_SEED__ = {"school": "AKB School of Excellence", "year": "2026-2027"
         .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
     },
 
+    /* ---- students: add ---- */
+    suggestId() {
+      const nums = this.students.map(s => String(s.id).replace(/\D/g, '')).filter(Boolean);
+      if (!nums.length) return '25260001';
+      // use the most common id length so a stray long/short id doesn't skew it
+      const byLen = {};
+      nums.forEach(n => { byLen[n.length] = (byLen[n.length] || 0) + 1; });
+      const modeLen = Object.keys(byLen).sort((a, b) => byLen[b] - byLen[a])[0];
+      let max = 0;
+      nums.forEach(n => { if (String(n.length) === modeLen) { const v = parseInt(n, 10); if (v > max) max = v; } });
+      return String(max + 1);
+    },
+    async addStudent(data) {
+      const id = String(data.id || '').trim();
+      if (!id) throw new Error('Student ID is required');
+      if (this.getStudent(id)) throw new Error('Student ID "' + id + '" already exists');
+      if (!data.name || !String(data.name).trim()) throw new Error('Student name is required');
+      const fees = {};
+      HEAD_ORDER.forEach(k => {
+        const total = Number((data.fees && data.fees[k]) || 0) || 0;
+        fees[k] = { label: HEAD_LABELS[k], total, paid: 0, balance: total };
+      });
+      const s = {
+        id, name: String(data.name).trim(), grade: data.grade || '', classTeacher: data.classTeacher || '',
+        gender: data.gender || '', dob: data.dob || '', age: data.age || '', prevSchool: data.prevSchool || '',
+        father: data.father || '', mother: data.mother || '', location: data.location || '', dropLocation: data.dropLocation || '',
+        transportType: data.transportType || '', vehicle: data.vehicle || '', contact: data.contact || '',
+        religion: data.religion || '', discount: Number(data.discount) || 0, admission: data.admission || 'NEW',
+        sportsActivity: data.sportsActivity || '', marks: { english: '', maths: '', science: '' }, fees
+      };
+      await this.saveStudent(s);
+      return s;
+    },
+
     /* ---- students: edit ---- */
     async saveStudent(s) {
       this.recompute(s);
@@ -629,6 +684,22 @@ window.__AKB_SEED__ = {"school": "AKB School of Excellence", "year": "2026-2027"
       if (i < 0) this.students.push(s);
       if (useIDB) await idbPut('students', s);
       else LS.setItem('akb_students', JSON.stringify(this.students));
+    },
+    // Delete a student record. Past receipts are kept (they carry the student's
+    // name/grade) unless withPayments is true.
+    async deleteStudent(id, withPayments) {
+      const i = this.students.findIndex(s => s.id === id);
+      if (i < 0) return;
+      this.students.splice(i, 1);
+      if (useIDB) await idbDelete('students', id);
+      else LS.setItem('akb_students', JSON.stringify(this.students));
+      if (withPayments) {
+        const keep = this.payments.filter(p => p.studentId !== id);
+        const removed = this.payments.filter(p => p.studentId === id);
+        this.payments = keep;
+        if (useIDB) { for (const r of removed) await idbDelete('payments', r.id); }
+        else LS.setItem('akb_payments', JSON.stringify(this.payments));
+      }
     },
 
     /* ---- users & auth (client-side gate) ---- */
@@ -1109,7 +1180,11 @@ window.__AKB_SEED__ = {"school": "AKB School of Excellence", "year": "2026-2027"
     view().innerHTML = `
       <div class="page-head">
         <div><h1>Students</h1><p>${Store.students.length} enrolled · click a row to view fees & the dashboard</p></div>
-        <button class="btn" id="expStudents">⬇ Export CSV</button>
+        <div class="flex gap">
+          <button class="btn" id="expStudents">⬇ Export CSV</button>
+          <button class="btn" id="importBtn">⬆ Import CSV</button>
+          <button class="btn primary" id="addStudentBtn">＋ Add Student</button>
+        </div>
       </div>
       <div class="cards">
         ${kpi('Students', Store.students.length, { accent: 'blue' })}
@@ -1177,8 +1252,161 @@ window.__AKB_SEED__ = {"school": "AKB School of Excellence", "year": "2026-2027"
     $('#stuStatus').onchange = e => { studentsState.status = e.target.value; apply(); };
     $('#stuSort').onchange = e => { studentsState.sort = e.target.value; apply(); };
     $('#expStudents').onclick = exportStudentsCSV;
+    $('#addStudentBtn').onclick = openAddStudentModal;
+    $('#importBtn').onclick = openImportModal;
     bindNav();
     apply();
+  }
+
+  /* -------------------------------------------------- Bulk import (CSV) */
+  // Import column headers (also used for the downloadable template)
+  const IMPORT_COLS = ['Student ID', 'Name', 'Grade', 'Class Teacher', 'Gender', 'Date of Birth',
+    'Father Name', 'Mother Name', 'Contact Number', 'Location', 'Transport', 'Bus/Driver',
+    'Religion', 'Discount %', 'Admission', 'Sports Activity', 'Previous School',
+    'Terms Fees', 'School Supplies', 'App Fees Paid', 'Uniform & Accessories',
+    'Transport Fees', 'Extra Curricular Fees', 'Evening Sports'];
+  function headerToKey(h) {
+    const n = String(h).trim().toLowerCase().replace(/\s+/g, ' ');
+    const map = {
+      'student id': 'id', 'id': 'id', 'name': 'name', 'student name': 'name', 'grade': 'grade',
+      'class teacher': 'classTeacher', 'gender': 'gender', 'date of birth': 'dob', 'dob': 'dob',
+      'father name': 'father', 'father': 'father', 'mother name': 'mother', 'mother': 'mother',
+      'contact number': 'contact', 'contact': 'contact', 'phone': 'contact', 'location': 'location',
+      'location (from)': 'location', 'transport': 'transportType', 'transport (own/school)': 'transportType',
+      'bus/driver': 'vehicle', 'bus / driver': 'vehicle', 'vehicle': 'vehicle', 'religion': 'religion',
+      'discount %': 'discountpct', 'discount(%)': 'discountpct', 'discount': 'discountpct',
+      'admission': 'admission', 'sports activity': 'sportsActivity', 'previous school': 'prevSchool'
+    };
+    if (map[n]) return map[n];
+    // fee heads by label
+    for (const k of Store.HEAD_ORDER) if (Store.HEAD_LABELS[k].toLowerCase() === n) return 'fee:' + k;
+    return null;
+  }
+
+  function openImportModal() {
+    const root = document.getElementById('modalRoot');
+    root.innerHTML = `
+      <div class="modal-backdrop" id="imBackdrop"><div class="modal wide">
+        <div class="modal-head"><h3>Import Students from CSV</h3><button class="x-close" id="imClose">&times;</button></div>
+        <div class="modal-body">
+          <ol class="muted" style="font-size:13px;line-height:1.8;margin:0 0 12px;padding-left:18px">
+            <li>In Excel/Google Sheets, save your list as <b>CSV</b> (File → Save As / Download → CSV).</li>
+            <li>Use these column headers (order doesn't matter; extra columns are ignored):</li>
+          </ol>
+          <div class="table-scroll" style="max-height:90px;border:1px solid var(--border);border-radius:8px;padding:8px;font-size:12px;margin-bottom:6px">${IMPORT_COLS.map(c => '<span class="badge gray" style="margin:2px">' + U.esc(c) + '</span>').join('')}</div>
+          <p class="muted" style="font-size:12px;margin:0 0 14px">Student ID is optional — blank IDs get auto‑numbered. Duplicate IDs are skipped. Fee columns are the total amount for each category (blank/0 = not applied).</p>
+          <div class="flex gap wrap">
+            <button class="btn sm" id="imTemplate">⬇ Download CSV template</button>
+            <label class="btn sm primary" style="cursor:pointer">Choose CSV file…<input type="file" id="imFile" accept=".csv,text/csv" class="hidden"/></label>
+          </div>
+          <div id="imResult" style="margin-top:14px"></div>
+        </div>
+        <div class="modal-foot"><button class="btn" id="imCancel">Close</button></div>
+      </div></div>`;
+    const close = () => { root.innerHTML = ''; };
+    $('#imClose', root).onclick = close; $('#imCancel', root).onclick = close;
+    $('#imBackdrop', root).onclick = e => { if (e.target.id === 'imBackdrop') close(); };
+    $('#imTemplate', root).onclick = () => {
+      const example = ['26270480', 'RIYAN AHMED', 'VI', 'RAGAVI', 'BOY', '2015-06-01', 'ABDUL AHMED',
+        'FATHIMA', '9000000000', 'PATHAMADAI', 'SCHOOL', 'TN72 BUS 1', 'MUSLIM', '0', 'NEW', 'CRICKET',
+        'AKB SCHOOL', '36000', '22500', '0', '5350', '8000', '0', '0'];
+      U.download('akb_student_import_template.csv', U.toCSV([IMPORT_COLS, example]), 'text/csv');
+    };
+    $('#imFile', root).onchange = (e) => {
+      const f = e.target.files[0]; if (!f) return;
+      const rd = new FileReader();
+      rd.onload = async () => {
+        try {
+          const rows = U.fromCSV(rd.result);
+          if (rows.length < 2) { $('#imResult', root).innerHTML = '<div class="badge red">No data rows found.</div>'; return; }
+          const keys = rows[0].map(headerToKey);
+          if (keys.indexOf('name') < 0) { $('#imResult', root).innerHTML = '<div class="badge red">A “Name” column is required.</div>'; return; }
+          $('#imResult', root).innerHTML = '<div class="muted">Importing ' + (rows.length - 1) + ' rows…</div>';
+          let added = 0, skipped = 0; const errs = [];
+          for (let r = 1; r < rows.length; r++) {
+            const row = rows[r]; if (!row.some(c => (c || '').trim())) continue;
+            const data = { fees: {} };
+            keys.forEach((key, ci) => {
+              if (!key) return; const val = (row[ci] || '').trim();
+              if (key.startsWith('fee:')) data.fees[key.slice(4)] = Number(val) || 0;
+              else data[key] = val;
+            });
+            if (data.discountpct != null) { const p = parseFloat(data.discountpct); data.discount = isNaN(p) ? 0 : (p > 1 ? p / 100 : p); delete data.discountpct; }
+            if (!data.name) { errs.push('Row ' + (r + 1) + ': missing name'); continue; }
+            if (!data.id) data.id = Store.suggestId();
+            try { await Store.addStudent(data); added++; }
+            catch (ex) { if (/already exists/.test(ex.message)) skipped++; else errs.push('Row ' + (r + 1) + ': ' + ex.message); }
+          }
+          $('#imResult', root).innerHTML =
+            `<div class="panel" style="margin:0"><div class="panel-body pad">
+              <div><span class="badge green">${added} added</span> ${skipped ? '<span class="badge amber">' + skipped + ' skipped (duplicate ID)</span>' : ''} ${errs.length ? '<span class="badge red">' + errs.length + ' errors</span>' : ''}</div>
+              ${errs.length ? '<div class="muted" style="font-size:12px;margin-top:8px;max-height:120px;overflow:auto">' + errs.slice(0, 50).map(U.esc).join('<br>') + '</div>' : ''}
+              <button class="btn sm primary mt" id="imDone">Done</button>
+            </div></div>`;
+          U.toast(added + ' students imported', 'success');
+          $('#imDone', root).onclick = () => { close(); students(); };
+        } catch (err) { $('#imResult', root).innerHTML = '<div class="badge red">Could not read file: ' + U.esc(err.message) + '</div>'; }
+      };
+      rd.readAsText(f);
+    };
+  }
+
+  /* -------------------------------------------------- Add student modal */
+  function openAddStudentModal() {
+    const root = document.getElementById('modalRoot');
+    const feeInputs = Store.HEAD_ORDER.map(k => {
+      const B = Store.BUSINESSES[Store.businessOfHead(k)];
+      return `<div class="fee-row" style="grid-template-columns:1.4fr 1fr">
+        <div><div class="fh-label">${U.esc(Store.HEAD_LABELS[k])}</div><div class="muted" style="font-size:11px">${U.esc(B.name)}</div></div>
+        <input type="number" min="0" step="1" data-fee="${k}" value="0" title="Total fee"/>
+      </div>`;
+    }).join('');
+    root.innerHTML = `
+      <div class="modal-backdrop" id="asBackdrop"><div class="modal wide">
+        <div class="modal-head"><h3>Add Student</h3><button class="x-close" id="asClose">&times;</button></div>
+        <div class="modal-body">
+          <h4 class="sec">Details</h4>
+          <div class="grid2">
+            ${textField('Student Name *', 'name', '')}
+            ${textField('Student ID *', 'id', Store.suggestId())}
+            ${textField('Grade', 'grade', '')}
+            ${textField('Class Teacher', 'classTeacher', '')}
+            ${textField('Gender', 'gender', '')}
+            ${textField('Date of Birth', 'dob', '')}
+            ${textField('Father Name', 'father', '')}
+            ${textField('Mother Name', 'mother', '')}
+            ${textField('Contact Number', 'contact', '')}
+            ${textField('Location (From)', 'location', '')}
+            ${textField('Transport (Own/School)', 'transportType', '')}
+            ${textField('Bus / Driver', 'vehicle', '')}
+            ${textField('Religion', 'religion', '')}
+            ${textField('Discount (%)', 'discountpct', '')}
+            ${textField('Sports Activity', 'sportsActivity', '')}
+            ${textField('Admission (OLD/NEW)', 'admission', 'NEW')}
+          </div>
+          <h4 class="sec">Fee Amounts (total for each category)</h4>
+          <div class="muted" style="font-size:12px;margin-bottom:6px">Leave 0 for any category that doesn't apply — you can still collect it later.</div>
+          ${feeInputs}
+        </div>
+        <div class="modal-foot"><button class="btn" id="asCancel">Cancel</button><button class="btn primary" id="asSave">Add Student</button></div>
+      </div></div>`;
+    const close = () => { root.innerHTML = ''; };
+    $('#asClose', root).onclick = close; $('#asCancel', root).onclick = close;
+    $('#asBackdrop', root).onclick = e => { if (e.target.id === 'asBackdrop') close(); };
+    $('#asSave', root).onclick = async () => {
+      const get = f => { const el = $(`[data-f="${f}"]`, root); return el ? el.value.trim() : ''; };
+      const data = {};
+      ['name', 'id', 'grade', 'classTeacher', 'gender', 'dob', 'father', 'mother', 'contact',
+        'location', 'transportType', 'vehicle', 'religion', 'sportsActivity', 'admission'].forEach(f => data[f] = get(f));
+      const pct = parseFloat(get('discountpct')); data.discount = isNaN(pct) ? 0 : pct / 100;
+      data.fees = {};
+      $$('[data-fee]', root).forEach(inp => data.fees[inp.dataset.fee] = Number(inp.value) || 0);
+      try {
+        const s = await Store.addStudent(data);
+        close(); U.toast('Student added · ' + s.name, 'success');
+        location.hash = '#/student/' + encodeURIComponent(s.id);
+      } catch (e) { U.toast(e.message, 'error'); }
+    };
   }
 
   function exportStudentsCSV() {
@@ -1265,6 +1493,7 @@ window.__AKB_SEED__ = {"school": "AKB School of Excellence", "year": "2026-2027"
         </div>
         <div class="flex gap">
           <button class="btn" id="editBtn">✏️ Edit</button>
+          <button class="btn danger" id="delStudentBtn">🗑 Delete</button>
           <button class="btn green" id="payBtn">🧾 Receive Payment</button>
         </div>
       </div>
@@ -1416,6 +1645,11 @@ window.__AKB_SEED__ = {"school": "AKB School of Excellence", "year": "2026-2027"
   function bindStudentActions(s) {
     $('#payBtn').onclick = () => openPaymentModal(s.id);
     $('#editBtn').onclick = () => openEditModal(s.id);
+    const del = document.getElementById('delStudentBtn');
+    if (del) del.onclick = () => {
+      if (!confirm('Delete student "' + s.name + '" (ID ' + s.id + ')?\n\nThis removes the student record. Their past receipts stay in Collections.')) return;
+      Store.deleteStudent(s.id).then(() => { U.toast('Student deleted', 'success'); location.hash = '#/students'; });
+    };
     $$('[data-print]').forEach(b => b.onclick = () => { const p = Store.payments.find(x => x.id === b.dataset.print); if (p) Receipt.open(p); });
     $$('[data-del]').forEach(b => b.onclick = async () => {
       if (!confirm('Delete this payment? The amount will be added back to the balance.')) return;

@@ -75,6 +75,27 @@
     setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 200);
   }
 
+  // Parse CSV text into an array of row-arrays (handles quotes, commas, newlines)
+  function fromCSV(text) {
+    const rows = []; let cur = [], field = '', inq = false;
+    text = String(text).replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+    if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1); // strip BOM
+    for (let i = 0; i < text.length; i++) {
+      const c = text[i];
+      if (inq) {
+        if (c === '"') { if (text[i + 1] === '"') { field += '"'; i++; } else inq = false; }
+        else field += c;
+      } else {
+        if (c === '"') inq = true;
+        else if (c === ',') { cur.push(field); field = ''; }
+        else if (c === '\n') { cur.push(field); rows.push(cur); cur = []; field = ''; }
+        else field += c;
+      }
+    }
+    cur.push(field); rows.push(cur);
+    return rows.filter(r => !(r.length === 1 && r[0].trim() === ''));
+  }
+
   function toCSV(rows) {
     return rows.map(r => r.map(c => {
       c = c == null ? '' : String(c);
@@ -96,5 +117,5 @@
     return 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
   }
 
-  w.U = { inr, inum, esc, initials, todayISO, fmtDate, inWords, debounce, download, toCSV, toast, uid };
+  w.U = { inr, inum, esc, initials, todayISO, fmtDate, inWords, debounce, download, toCSV, fromCSV, toast, uid };
 })(window);
