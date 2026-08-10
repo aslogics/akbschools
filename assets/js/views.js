@@ -426,6 +426,16 @@
       <td class="t-right"><button class="btn sm" data-print="${p.id}">🖨️</button> <button class="btn sm danger" data-del="${p.id}">✕</button></td></tr>`).join('')
       || `<tr><td colspan="${withAccount ? 7 : 6}" class="empty">No payments recorded in the app for this student.</td></tr>`;
   }
+  function bizPayRows(key) {
+    const list = Store.payments.filter(p => (p.business || 'school') === key).sort((a, b) => a.createdAt < b.createdAt ? 1 : -1);
+    return list.slice(0, 200).map(p => `<tr class="clickable" data-rcpt="${p.id}">
+      <td>${U.fmtDate(p.date)}</td><td class="mono">${U.esc(p.receiptNo)}</td>
+      <td>${U.esc(p.studentName)}<div class="muted" style="font-size:11px">${U.esc(p.grade || '')}</div></td>
+      <td>${p.items.map(i => U.esc(i.label)).join(', ')}</td><td><span class="pill-mode">${U.esc(p.mode)}</span></td>
+      <td class="num" style="color:var(--green);font-weight:600">${U.inr(p.amount)}</td>
+      <td class="t-right"><button class="btn sm" data-print="${p.id}">🖨️</button></td></tr>`).join('')
+      || '<tr><td colspan="7" class="empty">No collections recorded for this business yet.</td></tr>';
+  }
   function bindStudentActions(s) {
     $('#payBtn').onclick = () => openPaymentModal(s.id);
     $('#editBtn').onclick = () => openEditModal(s.id);
@@ -630,7 +640,7 @@
       const bizCards = Store.BUSINESS_ORDER.map(bk => {
         const B = Store.BUSINESSES[bk];
         const sum = list.filter(p => (p.business || 'school') === bk).reduce((a, p) => a + p.amount, 0);
-        return `<div class="card link" data-nav="#/collections?business=${bk}" style="border-left:4px solid ${B.color}">
+        return `<div class="card link" data-nav="#/business/${bk}" style="border-left:4px solid ${B.color}">
           <div class="biz-head"><img class="biz-logo" src="${B.logo}" alt=""/><div class="k" style="margin:0">${U.esc(B.name)}</div></div>
           <div class="v" style="font-size:20px">${U.inr(sum)}</div></div>`;
       }).join('');
@@ -841,6 +851,14 @@
           <thead><tr><th>Student</th><th>Grade</th><th>Contact</th>${heads.map(k => `<th class="t-right">${U.esc(Store.HEAD_LABELS[k])}</th>`).join('')}<th class="t-right">Pending</th><th></th></tr></thead>
           <tbody id="bizBody"></tbody></table></div>
         <div class="panel-body pad" id="bizFoot"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><h2>${U.esc(B.name)} — Collections</h2><a href="#/collections?business=${key}" class="btn sm">Open in Collections →</a></div>
+        <div class="table-scroll"><table>
+          <thead><tr><th>Date</th><th>Receipt</th><th>Student</th><th>For</th><th>Mode</th><th class="t-right">Amount</th><th></th></tr></thead>
+          <tbody>${bizPayRows(key)}</tbody></table></div>
+        <div class="panel-body pad muted">In-app collected for ${U.esc(B.name)}: <b style="color:var(--green)">${U.inr(appCollected)}</b></div>
       </div>`;
 
     function pendingHeadBal(s, k) { return (s.fees[k] || {}).balance || 0; }
@@ -878,6 +896,9 @@
       U.download('akb_' + key + '_pending.csv', U.toCSV(out), 'text/csv'); U.toast('Exported ' + rows.length + ' rows', 'success');
     };
     draw();
+    bindNav();
+    $$('[data-print]').forEach(b => b.onclick = () => { const p = Store.payments.find(x => x.id === b.dataset.print); if (p) Receipt.open(p); });
+    $$('[data-rcpt]').forEach(tr => tr.onclick = e => { if (e.target.dataset.print) return; const p = Store.payments.find(x => x.id === tr.dataset.rcpt); if (p) Receipt.open(p); });
   }
 
   /* -------------------------------------------------- Users (admin) */
