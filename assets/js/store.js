@@ -5,6 +5,20 @@
 (function (w) {
   'use strict';
 
+  // Safe storage: real localStorage when available, else an in-memory shim
+  // (keeps the app working in sandboxed iframes / private-mode restrictions).
+  var LS = (function () {
+    try { var s = w['local' + 'Storage']; var t = '__akbtest'; s.setItem(t, '1'); s.removeItem(t); return s; }
+    catch (e) {
+      var m = {};
+      return {
+        getItem: function (k) { return Object.prototype.hasOwnProperty.call(m, k) ? m[k] : null; },
+        setItem: function (k, v) { m[k] = String(v); },
+        removeItem: function (k) { delete m[k]; }
+      };
+    }
+  })();
+
   const DB_NAME = 'akb_fees';
   const DB_VERSION = 2;
   const STORES = ['students', 'payments', 'meta', 'users'];
@@ -80,10 +94,10 @@
         const metaRows = await idbAll('meta');
         this.meta = (metaRows[0] && metaRows[0].value) || {};
       } else {
-        this.students = JSON.parse(localStorage.getItem('akb_students') || '[]');
-        this.payments = JSON.parse(localStorage.getItem('akb_payments') || '[]');
-        this.users = JSON.parse(localStorage.getItem('akb_users') || '[]');
-        this.meta = JSON.parse(localStorage.getItem('akb_meta') || '{}');
+        this.students = JSON.parse(LS.getItem('akb_students') || '[]');
+        this.payments = JSON.parse(LS.getItem('akb_payments') || '[]');
+        this.users = JSON.parse(LS.getItem('akb_users') || '[]');
+        this.meta = JSON.parse(LS.getItem('akb_meta') || '{}');
       }
     },
 
@@ -107,9 +121,9 @@
       if (useIDB) {
         await idbClear('students'); await idbClear('payments'); await idbClear('meta');
       } else {
-        localStorage.removeItem('akb_students');
-        localStorage.removeItem('akb_payments');
-        localStorage.removeItem('akb_meta');
+        LS.removeItem('akb_students');
+        LS.removeItem('akb_payments');
+        LS.removeItem('akb_meta');
       }
       this.meta = {};
       await this.seed();
@@ -140,16 +154,16 @@
       if (useIDB) {
         await idbPutMany('students', this.students);
       } else {
-        localStorage.setItem('akb_students', JSON.stringify(this.students));
+        LS.setItem('akb_students', JSON.stringify(this.students));
       }
     },
     async persistStudent(s) {
       if (useIDB) await idbPut('students', s);
-      else localStorage.setItem('akb_students', JSON.stringify(this.students));
+      else LS.setItem('akb_students', JSON.stringify(this.students));
     },
     async persistMeta() {
       if (useIDB) await idbPut('meta', { id: 'meta', value: this.meta });
-      else localStorage.setItem('akb_meta', JSON.stringify(this.meta));
+      else LS.setItem('akb_meta', JSON.stringify(this.meta));
     },
 
     /* ---- payments ----
@@ -200,7 +214,7 @@
       this.meta.receiptSeq = (this.meta.receiptSeq || 0) + records.length;
 
       if (useIDB) { for (const r of records) await idbPut('payments', r); await idbPut('students', student); }
-      else { localStorage.setItem('akb_payments', JSON.stringify(this.payments)); localStorage.setItem('akb_students', JSON.stringify(this.students)); }
+      else { LS.setItem('akb_payments', JSON.stringify(this.payments)); LS.setItem('akb_students', JSON.stringify(this.students)); }
       await this.persistMeta();
       return records; // array — one per business
     },
@@ -221,7 +235,7 @@
       }
       this.payments.splice(idx, 1);
       if (useIDB) await idbDelete('payments', id);
-      else { localStorage.setItem('akb_payments', JSON.stringify(this.payments)); localStorage.setItem('akb_students', JSON.stringify(this.students)); }
+      else { LS.setItem('akb_payments', JSON.stringify(this.payments)); LS.setItem('akb_students', JSON.stringify(this.students)); }
     },
 
     studentPayments(id) {
@@ -235,7 +249,7 @@
       const i = this.students.findIndex(x => x.id === s.id);
       if (i < 0) this.students.push(s);
       if (useIDB) await idbPut('students', s);
-      else localStorage.setItem('akb_students', JSON.stringify(this.students));
+      else LS.setItem('akb_students', JSON.stringify(this.students));
     },
 
     /* ---- users & auth (client-side gate) ---- */
@@ -294,21 +308,21 @@
       if (target && target.role === 'admin' && admins.length <= 1) throw new Error('Cannot delete the last admin');
       this.users = this.users.filter(u => u.username !== username);
       if (useIDB) await idbDelete('users', username);
-      else localStorage.setItem('akb_users', JSON.stringify(this.users));
+      else LS.setItem('akb_users', JSON.stringify(this.users));
     },
     async persistUsers() {
       if (useIDB) { await idbClear('users'); await idbPutMany('users', this.users); }
-      else localStorage.setItem('akb_users', JSON.stringify(this.users));
+      else LS.setItem('akb_users', JSON.stringify(this.users));
     },
     // session (persisted so a refresh keeps you logged in on this device)
     setSession(u) {
       this.currentUser = u ? { username: u.username, role: u.role, name: u.name } : null;
-      if (u) localStorage.setItem('akb_session', JSON.stringify({ username: u.username, ts: Date.now() }));
-      else localStorage.removeItem('akb_session');
+      if (u) LS.setItem('akb_session', JSON.stringify({ username: u.username, ts: Date.now() }));
+      else LS.removeItem('akb_session');
     },
     restoreSession() {
       try {
-        const s = JSON.parse(localStorage.getItem('akb_session') || 'null');
+        const s = JSON.parse(LS.getItem('akb_session') || 'null');
         if (!s) return null;
         const u = this.getUser(s.username);
         if (u) { this.currentUser = { username: u.username, role: u.role, name: u.name }; return this.currentUser; }
@@ -338,10 +352,10 @@
         await idbPut('meta', { id: 'meta', value: this.meta });
         if (Array.isArray(obj.users) && obj.users.length) { await idbClear('users'); await idbPutMany('users', this.users); }
       } else {
-        localStorage.setItem('akb_students', JSON.stringify(this.students));
-        localStorage.setItem('akb_payments', JSON.stringify(this.payments));
-        localStorage.setItem('akb_meta', JSON.stringify(this.meta));
-        if (Array.isArray(obj.users) && obj.users.length) localStorage.setItem('akb_users', JSON.stringify(this.users));
+        LS.setItem('akb_students', JSON.stringify(this.students));
+        LS.setItem('akb_payments', JSON.stringify(this.payments));
+        LS.setItem('akb_meta', JSON.stringify(this.meta));
+        if (Array.isArray(obj.users) && obj.users.length) LS.setItem('akb_users', JSON.stringify(this.users));
       }
       this.recomputeAll();
     }
