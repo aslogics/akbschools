@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AKB Fees — Fee Collection</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%92%B0%3C/text%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="assets/css/styles.css" />
+</head>
+<body>
+  <div id="app">
+    <aside class="sidebar" id="sidebar">
+      <div class="brand">
+        <div class="brand-logo">AKB</div>
+        <div class="brand-text">
+          <strong>AKB School</strong>
+          <span>Fee Collection</span>
+        </div>
+      </div>
+      <nav class="nav" id="nav">
+        <a href="#/dashboard" data-route="dashboard"><span class="ico">📊</span> Dashboard</a>
+        <a href="#/students" data-route="students"><span class="ico">👨‍🎓</span> Students</a>
+        <a href="#/collect" data-route="collect"><span class="ico">🧾</span> Receive Payment</a>
+        <a href="#/collections" data-route="collections"><span class="ico">💵</span> Collections</a>
+        <a href="#/reports" data-route="reports"><span class="ico">📈</span> Reports</a>
+        <a href="#/data" data-route="data"><span class="ico">⚙️</span> Data &amp; Backup</a>
+      </nav>
+      <div class="sidebar-foot">
+        <div id="yearBadge" class="year-badge"></div>
+      </div>
+    </aside>
+
+    <div class="main">
+      <header class="topbar">
+        <button class="hamburger" id="hamburger" aria-label="Menu">☰</button>
+        <div class="search-wrap">
+          <input id="globalSearch" type="search" placeholder="Search student by name or ID…" autocomplete="off" />
+          <div id="searchResults" class="search-results"></div>
+        </div>
+        <div class="topbar-right">
+          <span id="dbStatus" class="db-status">●</span>
+        </div>
+      </header>
+      <main id="view" class="view"><!-- rendered by router --></main>
+    </div>
+  </div>
+
+  <div id="modalRoot"></div>
+  <div id="toastRoot" class="toast-root"></div>
+
+  <!-- Seed data (embedded so the app runs from file:// with no server) -->
+  <script src="data/seed.js"></script>
+  <script src="assets/js/utils.js"></script>
+  <script src="assets/js/store.js"></script>
+  <script src="assets/js/receipt.js"></script>
+  <script src="assets/js/views.js"></script>
+  <script src="assets/js/app.js"></script>
+</body>
+</html>
