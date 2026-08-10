@@ -80,7 +80,8 @@
           </div>
         </div>
       </div>`;
-    const close = () => { root.innerHTML = ''; };
+    document.body.classList.add('receipt-open');
+    const close = () => { root.innerHTML = ''; document.body.classList.remove('receipt-open'); };
     document.getElementById('rcptClose').onclick = close;
     document.getElementById('rcptCloseBtn').onclick = close;
     document.getElementById('rcptPrint').onclick = () => window.print();
