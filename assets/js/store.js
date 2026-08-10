@@ -271,7 +271,8 @@
         father: data.father || '', mother: data.mother || '', location: data.location || '', dropLocation: data.dropLocation || '',
         transportType: data.transportType || '', vehicle: data.vehicle || '', contact: data.contact || '',
         religion: data.religion || '', discount: Number(data.discount) || 0, admission: data.admission || 'NEW',
-        sportsActivity: data.sportsActivity || '', marks: { english: '', maths: '', science: '' }, fees
+        sportsActivity: data.sportsActivity || '', photo: data.photo || '',
+        marks: { english: '', maths: '', science: '' }, fees
       };
       await this.saveStudent(s);
       return s;

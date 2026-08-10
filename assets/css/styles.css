@@ -140,7 +140,14 @@ tbody tr.clickable{cursor:pointer}
 .info-list .row{display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-bottom:1px solid #f1f5f9;font-size:13px}
 .info-list .row .lbl{color:var(--muted)}
 .info-list .row .val{font-weight:600;text-align:right}
-.avatar{width:64px;height:64px;border-radius:14px;background:linear-gradient(135deg,#2563eb,#1e40af);color:#fff;display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:700}
+.avatar{width:64px;height:64px;border-radius:14px;background:linear-gradient(135deg,#2563eb,#1e40af);color:#fff;display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:700;overflow:hidden;flex:0 0 auto}
+.avatar img{width:100%;height:100%;object-fit:cover}
+/* Student photo */
+.student-photo-box{width:130px;height:150px;margin:0 auto 14px;border:1px solid var(--border);border-radius:10px;overflow:hidden;display:flex;align-items:center;justify-content:center;background:#f8fafc}
+.student-photo-box img{width:100%;height:100%;object-fit:cover}
+.photo-edit{display:flex;gap:14px;align-items:center;margin-bottom:6px}
+.photo-box{width:92px;height:108px;border:1px dashed var(--border);border-radius:10px;overflow:hidden;display:flex;align-items:center;justify-content:center;background:#f8fafc;flex:0 0 auto}
+.photo-box img{width:100%;height:100%;object-fit:cover}
 
 /* Progress bar */
 .progress{height:8px;background:#e2e8f0;border-radius:20px;overflow:hidden}

@@ -321,6 +321,15 @@
       <div class="modal-backdrop" id="asBackdrop"><div class="modal wide">
         <div class="modal-head"><h3>Add Student</h3><button class="x-close" id="asClose">&times;</button></div>
         <div class="modal-body">
+          <h4 class="sec">Photo</h4>
+          <div class="photo-edit">
+            <div class="photo-box" id="asPhoto"><span class="muted" style="font-size:11px">No photo</span></div>
+            <div>
+              <label class="btn sm primary" style="cursor:pointer">📎 Attach photo<input type="file" id="asPhotoFile" accept="image/*" class="hidden"/></label>
+              <button class="btn sm" id="asPhotoRemove">Remove</button>
+              <div class="muted" style="font-size:11px;margin-top:6px">Optional · JPG/PNG from your device.</div>
+            </div>
+          </div>
           <h4 class="sec">Details</h4>
           <div class="grid2">
             ${textField('Student Name *', 'name', '')}
@@ -347,11 +356,18 @@
         <div class="modal-foot"><button class="btn" id="asCancel">Cancel</button><button class="btn primary" id="asSave">Add Student</button></div>
       </div></div>`;
     const close = () => { root.innerHTML = ''; };
+    let photo = '';
+    $('#asPhotoFile', root).onchange = async e => {
+      const f = e.target.files[0]; if (!f) return;
+      try { photo = await U.imageToDataURL(f, 320); $('#asPhoto', root).innerHTML = `<img src="${photo}" alt=""/>`; }
+      catch (err) { U.toast(err.message, 'error'); }
+    };
+    $('#asPhotoRemove', root).onclick = () => { photo = ''; $('#asPhoto', root).innerHTML = '<span class="muted" style="font-size:11px">No photo</span>'; };
     $('#asClose', root).onclick = close; $('#asCancel', root).onclick = close;
     $('#asBackdrop', root).onclick = e => { if (e.target.id === 'asBackdrop') close(); };
     $('#asSave', root).onclick = async () => {
       const get = f => { const el = $(`[data-f="${f}"]`, root); return el ? el.value.trim() : ''; };
-      const data = {};
+      const data = { photo };
       ['name', 'id', 'grade', 'classTeacher', 'gender', 'dob', 'father', 'mother', 'contact',
         'location', 'transportType', 'vehicle', 'religion', 'sportsActivity', 'admission'].forEach(f => data[f] = get(f));
       const pct = parseFloat(get('discountpct')); data.discount = isNaN(pct) ? 0 : pct / 100;
@@ -443,7 +459,7 @@
         <div class="flex gap" style="align-items:center">
           <a href="#/students" class="btn ghost sm">← Back</a>
           <div class="flex gap" style="align-items:center">
-            <div class="avatar">${U.esc(U.initials(s.name))}</div>
+            <div class="avatar">${s.photo ? `<img src="${s.photo}" alt="${U.esc(s.name)}"/>` : U.esc(U.initials(s.name))}</div>
             <div><h1 style="margin:0">${U.esc(s.name)}</h1><p>Chairman Dashboard · ${U.esc(s.grade || '')} · ID ${U.esc(s.id)}</p></div>
           </div>
         </div>
@@ -481,7 +497,9 @@
         <div>
           <div class="panel">
             <div class="panel-head"><h2>Student Personal Information</h2></div>
-            <div class="panel-body pad"><div class="info-list">${infoRows([
+            <div class="panel-body pad">
+              <div class="student-photo-box">${s.photo ? `<img src="${s.photo}" alt="${U.esc(s.name)}"/>` : '<span class="muted" style="font-size:12px">No photo</span>'}</div>
+              <div class="info-list">${infoRows([
               ['Student Name', s.name], ['Student ID', s.id], ['Gender', s.gender],
               ['Date Of Birth', s.dob ? U.fmtDate(s.dob) : ''], ['Age', s.age],
               ['Father Name', s.father], ['Mother Name', s.mother], ['Location (From)', s.location],
@@ -630,6 +648,15 @@
       <div class="modal-backdrop" id="edBackdrop"><div class="modal wide">
         <div class="modal-head"><h3>Edit — ${U.esc(s.name)}</h3><button class="x-close" id="edClose">&times;</button></div>
         <div class="modal-body">
+          <h4 class="sec">Photo</h4>
+          <div class="photo-edit">
+            <div class="photo-box" id="edPhoto">${s.photo ? `<img src="${s.photo}" alt=""/>` : '<span class="muted" style="font-size:11px">No photo</span>'}</div>
+            <div>
+              <label class="btn sm primary" style="cursor:pointer">📎 Attach photo<input type="file" id="edPhotoFile" accept="image/*" class="hidden"/></label>
+              <button class="btn sm" id="edPhotoRemove">Remove</button>
+              <div class="muted" style="font-size:11px;margin-top:6px">JPG/PNG from your device · auto‑resized &amp; saved with the student.</div>
+            </div>
+          </div>
           <h4 class="sec">Personal</h4>
           <div class="grid2">
             ${textField('Student Name', 'name', s.name)}
@@ -661,9 +688,17 @@
         <div class="modal-foot"><button class="btn" id="edCancel">Cancel</button><button class="btn primary" id="edSave">Save changes</button></div>
       </div></div>`;
     const close = () => { root.innerHTML = ''; };
+    let photo = s.photo || '';
+    $('#edPhotoFile', root).onchange = async e => {
+      const f = e.target.files[0]; if (!f) return;
+      try { photo = await U.imageToDataURL(f, 320); $('#edPhoto', root).innerHTML = `<img src="${photo}" alt=""/>`; }
+      catch (err) { U.toast(err.message, 'error'); }
+    };
+    $('#edPhotoRemove', root).onclick = () => { photo = ''; $('#edPhoto', root).innerHTML = '<span class="muted" style="font-size:11px">No photo</span>'; };
     $('#edClose', root).onclick = close; $('#edCancel', root).onclick = close;
     $('#edBackdrop', root).onclick = e => { if (e.target.id === 'edBackdrop') close(); };
     $('#edSave', root).onclick = async () => {
+      s.photo = photo;
       ['name', 'grade', 'classTeacher', 'father', 'mother', 'contact', 'location', 'dropLocation',
         'transportType', 'vehicle', 'religion', 'sportsActivity', 'prevSchool', 'admission'].forEach(f => {
         const el = $(`[data-f="${f}"]`, root); if (el) s[f] = el.value.trim();

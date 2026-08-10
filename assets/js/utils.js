@@ -67,6 +67,31 @@
     let t; return function () { clearTimeout(t); const args = arguments, ctx = this; t = setTimeout(() => fn.apply(ctx, args), ms); };
   }
 
+  // Read an image File, downscale it, and return a compact JPEG data URI.
+  function imageToDataURL(file, maxDim) {
+    return new Promise((resolve, reject) => {
+      if (!file) return resolve('');
+      const rd = new FileReader();
+      rd.onerror = () => reject(new Error('Could not read file'));
+      rd.onload = () => {
+        const img = new Image();
+        img.onerror = () => reject(new Error('Not a valid image'));
+        img.onload = () => {
+          const M = maxDim || 320;
+          let w = img.width, h = img.height;
+          const scale = Math.min(1, M / Math.max(w, h));
+          w = Math.max(1, Math.round(w * scale)); h = Math.max(1, Math.round(h * scale));
+          const c = document.createElement('canvas'); c.width = w; c.height = h;
+          c.getContext('2d').drawImage(img, 0, 0, w, h);
+          try { resolve(c.toDataURL('image/jpeg', 0.85)); }
+          catch (e) { resolve(rd.result); } // fallback to original if tainted
+        };
+        img.src = rd.result;
+      };
+      rd.readAsDataURL(file);
+    });
+  }
+
   function download(filename, content, type) {
     const blob = new Blob([content], { type: type || 'application/octet-stream' });
     const url = URL.createObjectURL(blob);
@@ -117,5 +142,5 @@
     return 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
   }
 
-  w.U = { inr, inum, esc, initials, todayISO, fmtDate, inWords, debounce, download, toCSV, fromCSV, toast, uid };
+  w.U = { inr, inum, esc, initials, todayISO, fmtDate, inWords, debounce, download, toCSV, fromCSV, imageToDataURL, toast, uid };
 })(window);
