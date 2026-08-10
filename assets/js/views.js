@@ -57,10 +57,11 @@
     }).join('');
 
     const catRows = cats.map(c => `
-      <tr><td>${U.esc(c.label)}</td>
+      <tr><td><b>${U.esc(c.label)}</b></td>
         <td class="num">${U.inr(c.total)}</td>
         <td class="num" style="color:var(--green)">${U.inr(c.paid)}</td>
-        <td class="num" style="color:${c.bal > 0 ? 'var(--red)' : 'var(--muted)'}">${U.inr(c.bal)}</td>
+        <td class="num" style="color:${c.bal > 0 ? 'var(--red)' : 'var(--muted)'};font-weight:600">${U.inr(c.bal)}</td>
+        <td class="num">${c.total ? Math.round(c.paid / c.total * 100) : 0}%</td>
         <td style="width:120px"><div class="progress"><span style="width:${c.total ? Math.min(100, c.paid / c.total * 100) : 0}%"></span></div></td></tr>`).join('');
 
     const recent = Store.payments.slice().sort((a, b) => a.createdAt < b.createdAt ? 1 : -1).slice(0, 8)
@@ -82,17 +83,18 @@
         <div class="card accent-amber${admin ? ' link" data-nav="#/collections' : ''}"><div class="k">Collected Today</div><div class="v">${U.inr(todaySum)}</div><div class="sub">${todayPays.length} receipt(s) · in-app total ${U.inr(appCollected)}</div></div>
       </div>
       <div class="panel">
-        <div class="panel-head"><h2>Business-wise Collection</h2><span class="muted">click a card for its dues</span></div>
-        <div class="panel-body pad"><div class="cards" style="margin:0">${bizCards}</div></div>
-      </div>
-      <div class="panel">
-        <div class="panel-head"><h2>Fee Category Summary</h2><span class="muted">mirrors the “SUMMARY” sheet</span></div>
+        <div class="panel-head"><h2>Fee Category Summary — Total, Paid &amp; Pending</h2><span class="muted">all fee categories</span></div>
         <div class="table-scroll"><table>
-          <thead><tr><th>Fee Category</th><th class="t-right">Amount</th><th class="t-right">Received</th><th class="t-right">Receivable</th><th>Progress</th></tr></thead>
+          <thead><tr><th>Fee Category</th><th class="t-right">Total Fees</th><th class="t-right">Paid</th><th class="t-right">Pending</th><th class="t-right">% Paid</th><th>Progress</th></tr></thead>
           <tbody>${catRows}</tbody>
           <tfoot><tr style="font-weight:700;background:#f8fafc"><td>TOTAL</td><td class="num">${U.inr(gt)}</td>
-            <td class="num" style="color:var(--green)">${U.inr(gp)}</td><td class="num" style="color:var(--red)">${U.inr(gb)}</td><td></td></tr></tfoot>
+            <td class="num" style="color:var(--green)">${U.inr(gp)}</td><td class="num" style="color:var(--red)">${U.inr(gb)}</td>
+            <td class="num">${gt ? Math.round(gp / gt * 100) : 0}%</td><td></td></tr></tfoot>
         </table></div>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><h2>Business-wise Collection</h2><span class="muted">click a card for its pending students</span></div>
+        <div class="panel-body pad"><div class="cards" style="margin:0">${bizCards}</div></div>
       </div>
       <div class="panel">
         <div class="panel-head"><h2>Recent Payments</h2>${admin ? '<a href="#/collections" class="btn sm">View all →</a>' : ''}</div>
@@ -715,8 +717,8 @@
           <td class="num" style="color:${b.total - b.paid > 0 ? 'var(--red)' : 'var(--muted)'}">${U.inr(b.total - b.paid)}</td>
           <td class="num">${b.total ? Math.round(b.paid / b.total * 100) : 0}%</td></tr>`).join('')}</tbody></table></div></div>
 
-      <div class="panel"><div class="panel-head"><h2>Fee Category Summary</h2><button class="btn sm" id="expCat">⬇ CSV</button></div>
-        <div class="table-scroll"><table><thead><tr><th>Category</th><th>Business</th><th class="t-right">Amount</th><th class="t-right">Received</th><th class="t-right">Receivable</th><th class="t-right">%</th></tr></thead>
+      <div class="panel"><div class="panel-head"><h2>Fee Category Summary — Total, Paid &amp; Pending</h2><button class="btn sm" id="expCat">⬇ CSV</button></div>
+        <div class="table-scroll"><table><thead><tr><th>Category</th><th>Business</th><th class="t-right">Total Fees</th><th class="t-right">Paid</th><th class="t-right">Pending</th><th class="t-right">% Paid</th></tr></thead>
         <tbody>${cats.map(c => `<tr><td>${U.esc(c.label)}</td><td class="muted" style="font-size:12px">${U.esc(c.biz)}</td><td class="num">${U.inr(c.total)}</td><td class="num" style="color:var(--green)">${U.inr(c.paid)}</td><td class="num" style="color:${c.bal > 0 ? 'var(--red)' : 'var(--muted)'}">${U.inr(c.bal)}</td><td class="num">${c.total ? Math.round(c.paid / c.total * 100) : 0}%</td></tr>`).join('')}</tbody>
         <tfoot><tr style="font-weight:700;background:#f8fafc"><td>TOTAL</td><td></td><td class="num">${U.inr(gt)}</td><td class="num" style="color:var(--green)">${U.inr(gp)}</td><td class="num" style="color:var(--red)">${U.inr(gt - gp)}</td><td class="num">${gt ? Math.round(gp / gt * 100) : 0}%</td></tr></tfoot></table></div></div>
 
