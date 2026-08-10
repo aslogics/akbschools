@@ -8,8 +8,8 @@
     root.innerHTML = `
       <div class="login-screen">
         <form class="login-card" id="loginForm" autocomplete="on">
-          <div class="login-logo">AKB</div>
-          <h1>AKB School</h1>
+          <div class="login-logo"><img src="assets/img/logo-school.svg" alt="AKB School of Excellence" /></div>
+          <h1>AKB School of Excellence</h1>
           <p class="muted">Fee Collection · Sign in to continue</p>
           <div class="field"><label>Username</label><input id="lgUser" autofocus autocomplete="username" placeholder="admin / account1 / account2"/></div>
           <div class="field"><label>Password</label><input id="lgPass" type="password" autocomplete="current-password" placeholder="••••••••"/></div>
