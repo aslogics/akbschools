@@ -128,6 +128,25 @@
     }).join(',')).join('\r\n');
   }
 
+  // Normalise an Indian mobile to international digits (no +). Default CC 91.
+  function normalizePhone(num, cc) {
+    cc = cc || '91';
+    let d = String(num == null ? '' : num).replace(/\D/g, '');
+    if (!d) return '';
+    if (d.length > 10 && d.indexOf(cc) === 0) return d;   // already has country code
+    if (d.length === 11 && d[0] === '0') d = d.slice(1);   // drop leading 0
+    if (d.length === 10) return cc + d;
+    return d;
+  }
+  function waLink(num, text, cc) {
+    const n = normalizePhone(num, cc);
+    return 'https://wa.me/' + n + '?text=' + encodeURIComponent(text || '');
+  }
+  function smsLink(num, text, cc) {
+    const n = normalizePhone(num, cc);
+    return 'sms:' + (n ? '+' + n : '') + '?body=' + encodeURIComponent(text || '');
+  }
+
   function toast(msg, kind) {
     const root = document.getElementById('toastRoot');
     const el = document.createElement('div');
@@ -142,5 +161,5 @@
     return 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
   }
 
-  w.U = { inr, inum, esc, initials, todayISO, fmtDate, inWords, debounce, download, toCSV, fromCSV, imageToDataURL, toast, uid };
+  w.U = { inr, inum, esc, initials, todayISO, fmtDate, inWords, debounce, download, toCSV, fromCSV, imageToDataURL, normalizePhone, waLink, smsLink, toast, uid };
 })(window);

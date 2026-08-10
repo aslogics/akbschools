@@ -12,6 +12,27 @@
     return '<span class="badge amber">Partial</span>';
   }
 
+  // Fee-balance reminder message + WhatsApp/SMS click-to-send buttons
+  function reminderText(s) {
+    const t = Store.studentTotals(s);
+    const school = (Store.meta && Store.meta.school) || 'AKB School of Excellence';
+    const parts = Store.HEAD_ORDER.filter(k => (s.fees[k] || {}).balance > 0)
+      .map(k => Store.HEAD_LABELS[k] + ' ' + U.inr((s.fees[k] || {}).balance)).join(', ');
+    return 'Dear Parent, Fee reminder from ' + school + ' for ' + s.name + (s.grade ? ' (' + s.grade + ')' : '') +
+      '. Outstanding balance: ' + U.inr(t.balance) + (parts ? ' — ' + parts : '') +
+      '. Kindly clear the pending fees at the earliest. Thank you.';
+  }
+  function remindButtons(s) {
+    if (!s.contact || Store.studentTotals(s).balance <= 0) return '';
+    const txt = reminderText(s);
+    return `<a class="btn wa" target="_blank" rel="noopener" href="${U.waLink(s.contact, txt)}" title="Send WhatsApp reminder">💬 WhatsApp</a>` +
+      `<a class="btn" href="${U.smsLink(s.contact, txt)}" title="Send SMS reminder">✉️ SMS</a>`;
+  }
+  function remindIcon(s) {
+    if (!s.contact || Store.studentTotals(s).balance <= 0) return '';
+    return `<a class="btn sm wa" target="_blank" rel="noopener" href="${U.waLink(s.contact, reminderText(s))}" title="WhatsApp reminder to ${U.esc(s.contact)}">💬</a> `;
+  }
+
   /* -------------------------------------------------- Dashboard */
   function dashboard() {
     const students = Store.students;
@@ -340,7 +361,7 @@
             ${textField('Date of Birth', 'dob', '')}
             ${textField('Father Name', 'father', '')}
             ${textField('Mother Name', 'mother', '')}
-            ${textField('Contact Number', 'contact', '')}
+            ${textField('Parent Mobile', 'contact', '')}
             ${textField('Location (From)', 'location', '')}
             ${textField('Transport (Own/School)', 'transportType', '')}
             ${textField('Bus / Driver', 'vehicle', '')}
@@ -463,7 +484,8 @@
             <div><h1 style="margin:0">${U.esc(s.name)}</h1><p>Chairman Dashboard · ${U.esc(s.grade || '')} · ID ${U.esc(s.id)}</p></div>
           </div>
         </div>
-        <div class="flex gap">
+        <div class="flex gap wrap">
+          ${remindButtons(s)}
           <button class="btn" id="editBtn">✏️ Edit</button>
           <button class="btn danger" id="delStudentBtn">🗑 Delete</button>
           <button class="btn green" id="payBtn">🧾 Receive Payment</button>
@@ -504,7 +526,7 @@
               ['Date Of Birth', s.dob ? U.fmtDate(s.dob) : ''], ['Age', s.age],
               ['Father Name', s.father], ['Mother Name', s.mother], ['Location (From)', s.location],
               ['Drop/Pick Location', s.dropLocation], ['Transport', s.transportType],
-              ['Contact Number', s.contact], ['Religion', s.religion],
+              ['Parent Mobile', s.contact], ['Religion', s.religion],
               ['Discount', s.discount ? (s.discount * 100).toFixed(0) + '%' : ''],
               ['Bus / Driver', s.vehicle]
             ])}
@@ -664,7 +686,7 @@
             ${textField('Class Teacher', 'classTeacher', s.classTeacher)}
             ${textField('Father Name', 'father', s.father)}
             ${textField('Mother Name', 'mother', s.mother)}
-            ${textField('Contact Number', 'contact', s.contact)}
+            ${textField('Parent Mobile', 'contact', s.contact)}
             ${textField('Location (From)', 'location', s.location)}
             ${textField('Drop/Pick Location', 'dropLocation', s.dropLocation)}
             ${textField('Transport (Own/School)', 'transportType', s.transportType)}
@@ -937,6 +959,7 @@
               <option value="grade"${repState.sort === 'grade' ? ' selected' : ''}>Sort: Grade</option>
             </select>
             <button class="btn sm" id="expDue">⬇ CSV</button>
+            <button class="btn sm" id="expRemind">⬇ Reminders CSV</button>
           </div></div>
         <div class="table-scroll"><table><thead><tr><th>Student</th><th>Grade</th><th>Contact</th><th class="t-right">Total</th><th class="t-right">Paid</th><th class="t-right">Outstanding</th><th></th></tr></thead><tbody id="dueBody"></tbody></table></div>
         <div class="panel-body pad" id="dueFoot"></div>
@@ -976,7 +999,7 @@
           <td>${U.esc(r.s.grade || '')}</td><td class="mono">${U.esc(r.s.contact || '')}</td>
           <td class="num">${U.inr(r.t.total)}</td><td class="num" style="color:var(--green)">${U.inr(r.t.paid)}</td>
           <td class="num" style="color:${balOf(r) > 0 ? 'var(--red)' : 'var(--muted)'};font-weight:700">${U.inr(balOf(r))}</td>
-          <td class="t-right"><button class="btn green sm" data-pay="${U.esc(r.s.id)}">Collect</button></td></tr>`).join('') || '<tr><td colspan="7" class="empty">No students match these filters.</td></tr>';
+          <td class="t-right">${remindIcon(r.s)}<button class="btn green sm" data-pay="${U.esc(r.s.id)}">Collect</button></td></tr>`).join('') || '<tr><td colspan="7" class="empty">No students match these filters.</td></tr>';
       const sum = rows.reduce((a, r) => a + balOf(r), 0);
       $('#dueFoot').innerHTML = `<b>${rows.length}</b> students · Total ${repState.head ? U.esc(Store.HEAD_LABELS[repState.head]) + ' ' : ''}outstanding <b style="color:var(--red)">${U.inr(sum)}</b>`;
       $$('#dueBody [data-id]').forEach(tr => tr.onclick = e => { if (e.target.dataset.pay) return; location.hash = '#/student/' + encodeURIComponent(tr.dataset.id); });
@@ -994,6 +1017,13 @@
       const out = [['Student ID', 'Name', 'Grade', 'Father', 'Contact', 'Total', 'Paid', 'Outstanding']];
       rows.forEach(r => out.push([r.s.id, r.s.name, r.s.grade, r.s.father, r.s.contact, r.t.total, r.t.paid, balOf(r)]));
       U.download('akb_dues_filtered.csv', U.toCSV(out), 'text/csv'); U.toast('Exported ' + rows.length + ' rows', 'success');
+    };
+    $('#expRemind').onclick = () => {
+      const rows = filtered().filter(r => r.s.contact);
+      const out = [['Student', 'Grade', 'Parent Mobile', 'Outstanding', 'Message', 'WhatsApp Link']];
+      rows.forEach(r => out.push([r.s.name, r.s.grade, r.s.contact, balOf(r), reminderText(r.s), U.waLink(r.s.contact, reminderText(r.s))]));
+      U.download('akb_fee_reminders.csv', U.toCSV(out), 'text/csv');
+      U.toast('Exported ' + rows.length + ' reminders', 'success');
     };
     bindNav();
     dues();
@@ -1083,7 +1113,7 @@
         <td>${U.esc(r.s.grade || '')}</td><td class="mono">${U.esc(r.s.contact || '')}</td>
         ${heads.map(k => { const b = pendingHeadBal(r.s, k); return `<td class="num" style="color:${b > 0 ? 'var(--red)' : 'var(--muted)'}">${U.inr(b)}</td>`; }).join('')}
         <td class="num" style="color:var(--red);font-weight:700">${U.inr(r.bal)}</td>
-        <td class="t-right"><button class="btn green sm" data-pay="${U.esc(r.s.id)}">Collect</button></td></tr>`).join('')
+        <td class="t-right">${remindIcon(r.s)}<button class="btn green sm" data-pay="${U.esc(r.s.id)}">Collect</button></td></tr>`).join('')
         || `<tr><td colspan="${4 + heads.length}" class="empty">No students pending for ${U.esc(B.name)} 🎉</td></tr>`;
       const sum = rows.reduce((a, r) => a + r.bal, 0);
       $('#bizFoot').innerHTML = `<b>${rows.length}</b> pending students · Outstanding <b style="color:var(--red)">${U.inr(sum)}</b>`;

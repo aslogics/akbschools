@@ -97,6 +97,8 @@ tbody tr.clickable{cursor:pointer}
 .btn.green:hover{filter:brightness(.95)}
 .btn.danger{background:var(--red);border-color:var(--red);color:#fff}
 .btn.ghost{background:transparent;border-color:transparent}
+.btn.wa{background:#25d366;border-color:#25d366;color:#fff}
+.btn.wa:hover{background:#1ebe5b}
 .btn.sm{padding:6px 11px;font-size:12px}
 .btn:disabled{opacity:.5;cursor:not-allowed}
 
