@@ -16,7 +16,7 @@ def rd(p):
     return open(os.path.join(ROOT, p), encoding='utf-8').read()
 
 
-LOGOS = ['assets/img/logo-school.svg', 'assets/img/logo-sports.svg',
+LOGOS = ['assets/img/logo-school.svg', 'assets/img/logo-school-full.svg', 'assets/img/logo-sports.svg',
          'assets/img/logo-co.svg', 'assets/img/logo-falcon.svg']
 datauris = {p: 'data:image/svg+xml;base64,' + base64.b64encode(rd(p).encode()).decode('ascii') for p in LOGOS}
 

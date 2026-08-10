@@ -13,18 +13,9 @@
         <td style="padding:8px 10px;border:1px solid #e2e8f0;text-align:right">${U.inr(it.amount)}</td></tr>`).join('');
     return `
     <div class="receipt" style="font-family:Arial,sans-serif;color:#111;max-width:620px;margin:0 auto 22px;padding:24px 28px;border:1px solid #e2e8f0;border-radius:8px">
-      <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:3px solid ${B.color};padding-bottom:12px;margin-bottom:14px">
-        <div style="display:flex;align-items:center;gap:12px">
-          <img src="${B.logo}" alt="${U.esc(B.name)}" style="height:60px;width:auto"/>
-          <div>
-            <div style="font-size:20px;font-weight:800;color:${B.color};letter-spacing:.3px">${U.esc(B.name)}</div>
-            <div style="font-size:11px;color:#555">${U.esc(B.sub)}</div>
-          </div>
-        </div>
-        <div style="text-align:right">
-          <div style="font-size:13px;font-weight:700;color:${B.color}">FEE RECEIPT</div>
-          <div style="font-size:11px;color:#555">A.Y. ${U.esc(Store.meta.year || '2026-2027')}</div>
-        </div>
+      <div style="text-align:center;border-bottom:3px solid ${B.color};padding-bottom:10px;margin-bottom:14px">
+        <img src="${B.logoFull || B.logo}" alt="${U.esc(B.name)}" style="max-height:96px;max-width:100%;width:auto"/>
+        <div style="font-size:13px;font-weight:700;color:${B.color};letter-spacing:1px;margin-top:6px">FEE RECEIPT &middot; A.Y. ${U.esc(Store.meta.year || '2026-2027')}</div>
       </div>
 
       <table style="width:100%;font-size:13px;margin-bottom:12px"><tbody>

@@ -41,10 +41,10 @@
   };
   // The 4 businesses, each issuing its own receipt with its own logo
   const BUSINESSES = {
-    school: { key: 'school', name: 'AKB School of Excellence', sub: 'Senior Secondary CBSE School', logo: 'assets/img/logo-school.svg', color: '#7f1d1d', prefix: 'AKB' },
-    sports: { key: 'sports', name: 'AKB Sports Academy', sub: 'One Team · One Passion · One Legacy', logo: 'assets/img/logo-sports.svg', color: '#7c1d2e', prefix: 'SA' },
-    co: { key: 'co', name: 'AKB & Co', sub: 'School Supplies · Games · Playing Courts', logo: 'assets/img/logo-co.svg', color: '#1e3a8a', prefix: 'CO' },
-    falcon: { key: 'falcon', name: 'Falcon Trading & Transport', sub: 'Transport Services', logo: 'assets/img/logo-falcon.svg', color: '#c2410c', prefix: 'FTT' }
+    school: { key: 'school', name: 'AKB School of Excellence', sub: 'Senior Secondary CBSE School', logo: 'assets/img/logo-school.svg', logoFull: 'assets/img/logo-school-full.svg', color: '#7f1d1d', prefix: 'AKB' },
+    sports: { key: 'sports', name: 'AKB Sports Academy', sub: 'One Team · One Passion · One Legacy', logo: 'assets/img/logo-sports.svg', logoFull: 'assets/img/logo-sports.svg', color: '#7c1d2e', prefix: 'SA' },
+    co: { key: 'co', name: 'AKB & Co', sub: 'School Supplies · Games · Playing Courts', logo: 'assets/img/logo-co.svg', logoFull: 'assets/img/logo-co.svg', color: '#1e3a8a', prefix: 'CO' },
+    falcon: { key: 'falcon', name: 'Falcon Trading & Transport', sub: 'Transport Services', logo: 'assets/img/logo-falcon.svg', logoFull: 'assets/img/logo-falcon.svg', color: '#c2410c', prefix: 'FTT' }
   };
   const BUSINESS_ORDER = ['school', 'co', 'falcon', 'sports'];
   // fee head -> business key

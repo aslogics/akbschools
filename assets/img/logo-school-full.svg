@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 214" role="img" aria-label="AKB School of Excellence — Senior Secondary CBSE School">
+  <defs><style>.m{fill:#7a1420}.c{fill:#f6eeda}.b{fill:#22409a}</style></defs>
+  <!-- crest emblem (centered) -->
+  <g transform="translate(312,2) scale(0.82)">
+    <g class="m">
+      <path d="M45 31 L40 15 L50 22 L60 9 L70 22 L80 15 L75 31 Z"/>
+      <circle cx="60" cy="6" r="3"/><circle cx="40" cy="12" r="2.4"/><circle cx="80" cy="12" r="2.4"/>
+    </g>
+    <path d="M33 33 H87 V64 C87 84 75 95 60 101 C45 95 33 84 33 64 Z" class="m"/>
+    <path d="M38 38 H82 V63 C82 80 72 89 60 95 C48 89 38 80 38 63 Z" class="c"/>
+    <text x="60" y="65" text-anchor="middle" font-family="Georgia,'Times New Roman',serif" font-weight="800" font-size="23" class="m" letter-spacing="-1">AKB</text>
+    <text x="60" y="75" text-anchor="middle" font-size="7.5" class="b" letter-spacing="1.5">&#9733;&#9733;&#9733;&#9733;&#9733;</text>
+    <path d="M49 80 C53 77 57 77 60 79 C63 77 67 77 71 80 L71 91 C67 88 63 88 60 90 C57 88 53 88 49 91 Z" class="m"/>
+    <line x1="60" y1="79" x2="60" y2="90" stroke="#f6eeda" stroke-width="1.2"/>
+    <g fill="none" stroke="#22409a" stroke-width="3" stroke-linecap="round">
+      <path d="M32 66 C22 60 15 63 11 71 C17 67 23 68 27 73 C29 69 31 68 33 69"/>
+      <path d="M88 66 C98 60 105 63 109 71 C103 67 97 68 93 73 C91 69 89 68 87 69"/>
+    </g>
+  </g>
+  <!-- wordmark -->
+  <text x="360" y="140" text-anchor="middle" font-family="Georgia,'Times New Roman',serif" font-weight="800" font-size="42" class="m" letter-spacing="0">AKB SCHOOL OF EXCELLENCE</text>
+  <text x="360" y="166" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-weight="700" font-size="18" class="m" letter-spacing="2">SENIOR SECONDARY CBSE SCHOOL</text>
+  <!-- banner -->
+  <polygon points="236,174 484,174 498,188 484,202 236,202 222,188" class="b"/>
+  <text x="360" y="193" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-weight="700" font-size="14" fill="#ffffff" letter-spacing="2">EXCELLENCE IN EDUCATION</text>
+</svg>
