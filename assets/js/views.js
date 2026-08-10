@@ -20,8 +20,7 @@
       .map(k => Store.HEAD_LABELS[k] + ' ' + U.inr((s.fees[k] || {}).balance)).join(', ');
     return 'Dear Parent, Fee reminder from ' + school + ' for ' + s.name + (s.grade ? ' (' + s.grade + ')' : '') +
       '. Outstanding balance: ' + U.inr(t.balance) + (parts ? ' — ' + parts : '') +
-      '. Kindly clear the pending fees at the earliest. For queries, contact the school on ' +
-      (Store.SCHOOL_WHATSAPP_DISPLAY || '') + '. Thank you.';
+      '. Kindly clear the pending fees at the earliest. Thank you.';
   }
   function remindButtons(s) {
     if (!s.contact || Store.studentTotals(s).balance <= 0) return '';
