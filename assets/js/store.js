@@ -47,6 +47,9 @@
     falcon: { key: 'falcon', name: 'Falcon Trading & Transport', sub: 'Transport Services', logo: 'assets/img/logo-falcon.svg', logoFull: 'assets/img/logo-falcon.svg', color: '#c2410c', prefix: 'FTT' }
   };
   const BUSINESS_ORDER = ['school', 'co', 'falcon', 'sports'];
+  // School WhatsApp / contact number (shown on receipts & in reminders)
+  const SCHOOL_WHATSAPP = '+919003950980';
+  const SCHOOL_WHATSAPP_DISPLAY = '+91 90039 50980';
   // fee head -> business key
   const HEAD_BUSINESS = {
     term: 'school', app_fees: 'school', extra_curricular: 'school',
@@ -66,6 +69,7 @@
     meta: {},
     currentUser: null,
     ENTITIES, MODES, HEAD_ORDER, HEAD_LABELS, BUSINESS, BUSINESSES, BUSINESS_ORDER, HEAD_BUSINESS,
+    SCHOOL_WHATSAPP, SCHOOL_WHATSAPP_DISPLAY,
 
     async init() {
       try {
