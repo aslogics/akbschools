@@ -2,8 +2,9 @@
 (function (w) {
   'use strict';
 
-  // routes allowed for the "account" role; everything else is admin-only
-  const ACCOUNT_ROUTES = { dashboard: 1, students: 1, student: 1, collect: 1, business: 1 };
+  // routes allowed for the "account" role. Accounts share the full admin
+  // dashboard/collections/reports; only Users and Data & Backup stay admin-only.
+  const ACCOUNT_ROUTES = { dashboard: 1, students: 1, student: 1, collect: 1, business: 1, collections: 1, reports: 1 };
 
   const Router = {
     render() { route(); },

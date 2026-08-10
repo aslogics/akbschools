@@ -14,7 +14,6 @@
 
   /* -------------------------------------------------- Dashboard */
   function dashboard() {
-    const admin = Store.isAdmin();
     const students = Store.students;
     const cats = Store.HEAD_ORDER.map(k => {
       let total = 0, paid = 0;
@@ -78,9 +77,9 @@
       </div>
       <div class="cards">
         <div class="card accent-blue link" data-nav="#/students"><div class="k">Total Fees</div><div class="v">${U.inr(gt)}</div><div class="sub">${students.length} students</div></div>
-        <div class="card accent-green link" data-nav="${admin ? '#/collections' : '#/students'}"><div class="k">Collected</div><div class="v">${U.inr(gp)}</div><div class="sub">${gt ? Math.round(gp / gt * 100) : 0}% of total</div></div>
-        <div class="card accent-red link" data-nav="${admin ? '#/reports' : '#/students?status=due'}"><div class="k">Outstanding</div><div class="v">${U.inr(gb)}</div><div class="sub">${defaulters} students with dues</div></div>
-        <div class="card accent-amber${admin ? ' link" data-nav="#/collections' : ''}"><div class="k">Collected Today</div><div class="v">${U.inr(todaySum)}</div><div class="sub">${todayPays.length} receipt(s) · in-app total ${U.inr(appCollected)}</div></div>
+        <div class="card accent-green link" data-nav="#/collections"><div class="k">Collected</div><div class="v">${U.inr(gp)}</div><div class="sub">${gt ? Math.round(gp / gt * 100) : 0}% of total</div></div>
+        <div class="card accent-red link" data-nav="#/reports"><div class="k">Outstanding</div><div class="v">${U.inr(gb)}</div><div class="sub">${defaulters} students with dues</div></div>
+        <div class="card accent-amber link" data-nav="#/collections"><div class="k">Collected Today</div><div class="v">${U.inr(todaySum)}</div><div class="sub">${todayPays.length} receipt(s) · in-app total ${U.inr(appCollected)}</div></div>
       </div>
       <div class="panel">
         <div class="panel-head"><h2>Fee Category Summary — Total, Paid &amp; Pending</h2><span class="muted">all fee categories</span></div>
@@ -97,7 +96,7 @@
         <div class="panel-body pad"><div class="cards" style="margin:0">${bizCards}</div></div>
       </div>
       <div class="panel">
-        <div class="panel-head"><h2>Recent Payments</h2>${admin ? '<a href="#/collections" class="btn sm">View all →</a>' : ''}</div>
+        <div class="panel-head"><h2>Recent Payments</h2><a href="#/collections" class="btn sm">View all →</a></div>
         <div class="table-scroll"><table><thead><tr><th>Date</th><th>Student</th><th>Mode</th><th class="t-right">Amount</th></tr></thead>
           <tbody>${recent}</tbody></table></div>
       </div>
@@ -229,8 +228,7 @@
   function studentDetail(id) {
     const s = Store.getStudent(id);
     if (!s) { view().innerHTML = `<div class="empty">Student not found. <a href="#/students">Back to list</a></div>`; return; }
-    if (Store.isAdmin()) chairmanDashboard(s);
-    else studentFeeView(s);
+    chairmanDashboard(s);
   }
 
   function feeCategoryRows(s, withBusiness) {
@@ -863,7 +861,7 @@
       </div>
 
       <div class="panel">
-        <div class="panel-head"><h2>${U.esc(B.name)} — Collections</h2>${Store.isAdmin() ? `<a href="#/collections?business=${key}" class="btn sm">Open in Collections →</a>` : ''}</div>
+        <div class="panel-head"><h2>${U.esc(B.name)} — Collections</h2><a href="#/collections?business=${key}" class="btn sm">Open in Collections →</a></div>
         <div class="table-scroll"><table>
           <thead><tr><th>Date</th><th>Receipt</th><th>Student</th><th>For</th><th>Mode</th><th class="t-right">Amount</th><th></th></tr></thead>
           <tbody>${bizPayRows(key)}</tbody></table></div>
