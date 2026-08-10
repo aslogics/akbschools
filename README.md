@@ -56,6 +56,45 @@ On first launch it loads the **428 students** and their fee balances from the wo
   # then regenerate data/seed.js from it (see script header)
   ```
 
+## Deploying to Railway
+
+The repo includes a tiny zero‑dependency Node static server (`server.js`) that binds to
+`$PORT`, plus `package.json` and `railway.json`, so Railway can build and run it as‑is.
+
+**Recommended — deploy from GitHub (no CLI):**
+1. Go to <https://railway.app> → **New Project** → **Deploy from GitHub repo**.
+2. Pick `mdabdulkasim1/akbschools` and the branch `claude/fee-collection-app-ewi29a`
+   (or merge it to your default branch first and deploy that).
+3. Railway auto‑detects Node, runs `npm start` (`node server.js`). No build config needed.
+4. Under **Settings → Networking → Generate Domain** to get a public URL.
+
+**Or with the Railway CLI:**
+```bash
+npm i -g @railway/cli
+railway login
+railway init          # in the repo folder
+railway up            # deploys current directory
+railway domain        # generate a public URL
+```
+
+### 🔐 Protect it with a password (do this before sharing the URL)
+
+The app has **no built‑in login** and contains **student personal data**. A public Railway URL
+would otherwise be readable by anyone who has the link. The server supports optional HTTP Basic
+Auth — enable it by setting environment variables in Railway
+(**Variables** tab, or `railway variables set …`):
+
+| Variable | Value |
+|----------|-------|
+| `APP_PASSWORD` | a strong password (required to turn auth on) |
+| `APP_USER` | username (optional, default `admin`) |
+
+When `APP_PASSWORD` is set, the whole site prompts for username/password. Without it, the site is
+open to anyone with the URL.
+
+> This Basic‑Auth gate is a simple guard for a small deployment, not a full user‑management
+> system. For multiple staff accounts / roles, we'd add a proper backend + login.
+
 ## Project structure
 
 ```
@@ -66,6 +105,9 @@ assets/js/store.js    IndexedDB storage + in‑memory cache + seeding
 assets/js/receipt.js  Printable receipt rendering
 assets/js/views.js    All pages (dashboard, students, detail, collect, collections, reports, data)
 assets/js/app.js      Hash router + global search + bootstrap
+server.js             Zero-dependency static server (binds $PORT, optional Basic Auth)
+package.json          npm start -> node server.js  (for Railway/Nixpacks)
+railway.json          Railway build/deploy config
 data/seed.js          Embedded student+fee seed (used by the app)
 data/students.seed.json  Same data as JSON (source)
 scripts/extract_seed.py  Regenerates the seed from the Excel workbook
