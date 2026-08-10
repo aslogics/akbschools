@@ -1129,6 +1129,13 @@ window.__AKB_SEED__ = {"school": "AKB School of Excellence", "year": "2026-2027"
     if (!s.contact || Store.studentTotals(s).balance <= 0) return '';
     return `<a class="btn sm wa" target="_blank" rel="noopener" href="${U.waLink(s.contact, reminderText(s))}" title="WhatsApp reminder to ${U.esc(s.contact)}">💬</a> `;
   }
+  // server-side WhatsApp API status (school "flow" number), cached
+  let _waStatus;
+  function getWaStatus() {
+    if (_waStatus) return _waStatus;
+    _waStatus = fetch('api/wa-status').then(r => r.ok ? r.json() : { configured: false }).catch(() => ({ configured: false }));
+    return _waStatus;
+  }
 
   /* -------------------------------------------------- Dashboard */
   function dashboard() {
@@ -2057,6 +2064,7 @@ window.__AKB_SEED__ = {"school": "AKB School of Excellence", "year": "2026-2027"
             </select>
             <button class="btn sm" id="expDue">⬇ CSV</button>
             <button class="btn sm" id="expRemind">⬇ Reminders CSV</button>
+            <button class="btn sm wa hidden" id="bulkWa">📣 Send WhatsApp Reminders</button>
           </div></div>
         <div class="table-scroll"><table><thead><tr><th>Student</th><th>Grade</th><th>Contact</th><th class="t-right">Total</th><th class="t-right">Paid</th><th class="t-right">Outstanding</th><th></th></tr></thead><tbody id="dueBody"></tbody></table></div>
         <div class="panel-body pad" id="dueFoot"></div>
@@ -2122,6 +2130,28 @@ window.__AKB_SEED__ = {"school": "AKB School of Excellence", "year": "2026-2027"
       U.download('akb_fee_reminders.csv', U.toCSV(out), 'text/csv');
       U.toast('Exported ' + rows.length + ' reminders', 'success');
     };
+    // Bulk send via the school WhatsApp API number (only if the server is configured & user is admin)
+    if (Store.isAdmin()) getWaStatus().then(st => {
+      if (!st || !st.configured) return;
+      const btn = $('#bulkWa'); if (!btn) return;
+      btn.classList.remove('hidden');
+      btn.title = 'Send from school WhatsApp (' + (st.provider || 'api') + ')';
+      btn.onclick = async () => {
+        const rows = filtered().filter(r => r.s.contact);
+        if (!rows.length) { U.toast('No recipients with a mobile number', 'error'); return; }
+        if (!confirm('Send ' + rows.length + ' fee reminders from the school WhatsApp number?\n\nThis sends real messages and may incur charges.')) return;
+        btn.disabled = true; btn.textContent = 'Sending…';
+        const recipients = rows.map(r => ({ phone: r.s.contact, name: r.s.name, grade: r.s.grade || '', balance: U.inr(balOf(r)), id: r.s.id }));
+        try {
+          const res = await fetch('api/send-reminders', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ recipients }) });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
+          U.toast('Sent ' + (data.sent || 0) + (data.failed ? ' · failed ' + data.failed : ''), data.failed ? 'error' : 'success');
+          if (data.failed && data.errors) console.warn('WhatsApp send errors:', data.errors);
+        } catch (e) { U.toast('Send failed: ' + e.message, 'error'); }
+        btn.disabled = false; btn.textContent = '📣 Send WhatsApp Reminders';
+      };
+    });
     bindNav();
     dues();
   }

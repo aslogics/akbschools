@@ -145,6 +145,39 @@ open to anyone with the URL.
 > This Basic‑Auth gate is a simple guard for a small deployment, not a full user‑management
 > system. For multiple staff accounts / roles, we'd add a proper backend + login.
 
+## WhatsApp bulk fee reminders (optional, server-side)
+
+The app can send fee‑balance reminders in bulk from the school's WhatsApp Business
+API ("flow") number. The secret token stays on the server (Railway env vars) — never
+in the browser or the repo. Sending is **admin‑only** and requires `APP_PASSWORD` to be set.
+
+Set these variables in **Railway → Variables**:
+
+| Variable | Meaning |
+|----------|---------|
+| `WA_PROVIDER` | `meta`, `interakt`, or `gupshup` |
+| `WA_TOKEN` | API key / access token (secret) |
+| `WA_TEMPLATE` | approved template **name** (meta/interakt) or template **id** (gupshup) |
+| `WA_LANG` | template language code (default `en`) |
+| `WA_PARAMS` | comma list of fields mapped to the template body variables, in order. Options: `name,balance,grade,school,id`. Default `name,balance` → `{{1}}=name`, `{{2}}=balance` |
+| `WA_PHONE_ID` | **Meta only** — WhatsApp phone number ID |
+| `WA_SOURCE`, `WA_APP` | **Gupshup only** — sender number and app name |
+| `APP_PASSWORD` | required — protects the send endpoint |
+
+**Template:** WhatsApp requires a pre‑approved template for business‑initiated messages.
+Create one in your provider whose body uses the variables you listed in `WA_PARAMS`, e.g.
+*"Dear Parent, fee reminder for {{1}}. Outstanding balance: {{2}}. Kindly clear it at the
+earliest. — AKB School of Excellence."*
+
+**Using it:** admin → **Reports**, filter the defaulters you want (grade / business / etc.),
+then click **📣 Send WhatsApp Reminders**. The app posts the list to `POST /api/send-reminders`,
+which sends one templated message per parent via your provider and reports sent/failed counts.
+Per‑student **💬 WhatsApp** / **✉️ SMS** click‑to‑send buttons remain available and need no setup.
+
+> Endpoints: `GET /api/wa-status` (is it configured?) and `POST /api/send-reminders`
+> (`{recipients:[{phone,name,grade,balance,id}]}`). The button only appears when the server
+> reports `configured:true`.
+
 ## Project structure
 
 ```
