@@ -209,11 +209,14 @@ h4.sec:first-child{margin-top:0}
 /* ===== Print (receipt) ===== */
 @media print{
   body{background:#fff}
-  .sidebar,.topbar,#toastRoot,.no-print{display:none!important}
-  .main{margin:0}
+  #toastRoot,#authRoot,.no-print{display:none!important}
+  .sidebar,.topbar{display:none!important}
+  .main{margin:0!important}
   .view{padding:0;max-width:none}
+  /* When a receipt is open, print ONLY the receipt — hide the page behind it */
+  body.receipt-open #app{display:none!important}
   .modal-backdrop{position:static;background:none;padding:0;display:block}
-  .modal{box-shadow:none;max-width:none}
+  .modal{box-shadow:none;max-width:none;width:auto}
   .modal-head,.modal-foot{display:none!important}
   .receipt{box-shadow:none!important;border:none!important;page-break-after:always}
   .receipt:last-child{page-break-after:auto}
@@ -1030,7 +1033,8 @@ window.__AKB_SEED__ = {"school": "AKB School of Excellence", "year": "2026-2027"
           </div>
         </div>
       </div>`;
-    const close = () => { root.innerHTML = ''; };
+    document.body.classList.add('receipt-open');
+    const close = () => { root.innerHTML = ''; document.body.classList.remove('receipt-open'); };
     document.getElementById('rcptClose').onclick = close;
     document.getElementById('rcptCloseBtn').onclick = close;
     document.getElementById('rcptPrint').onclick = () => window.print();
