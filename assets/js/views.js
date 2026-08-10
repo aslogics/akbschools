@@ -14,6 +14,7 @@
 
   /* -------------------------------------------------- Dashboard */
   function dashboard() {
+    const admin = Store.isAdmin();
     const students = Store.students;
     const cats = Store.HEAD_ORDER.map(k => {
       let total = 0, paid = 0;
@@ -76,9 +77,9 @@
       </div>
       <div class="cards">
         <div class="card accent-blue link" data-nav="#/students"><div class="k">Total Fees</div><div class="v">${U.inr(gt)}</div><div class="sub">${students.length} students</div></div>
-        <div class="card accent-green link" data-nav="#/collections"><div class="k">Collected</div><div class="v">${U.inr(gp)}</div><div class="sub">${gt ? Math.round(gp / gt * 100) : 0}% of total</div></div>
-        <div class="card accent-red link" data-nav="#/reports"><div class="k">Outstanding</div><div class="v">${U.inr(gb)}</div><div class="sub">${defaulters} students with dues</div></div>
-        <div class="card accent-amber link" data-nav="#/collections"><div class="k">Collected Today</div><div class="v">${U.inr(todaySum)}</div><div class="sub">${todayPays.length} receipt(s) · in-app total ${U.inr(appCollected)}</div></div>
+        <div class="card accent-green link" data-nav="${admin ? '#/collections' : '#/students'}"><div class="k">Collected</div><div class="v">${U.inr(gp)}</div><div class="sub">${gt ? Math.round(gp / gt * 100) : 0}% of total</div></div>
+        <div class="card accent-red link" data-nav="${admin ? '#/reports' : '#/students?status=due'}"><div class="k">Outstanding</div><div class="v">${U.inr(gb)}</div><div class="sub">${defaulters} students with dues</div></div>
+        <div class="card accent-amber${admin ? ' link" data-nav="#/collections' : ''}"><div class="k">Collected Today</div><div class="v">${U.inr(todaySum)}</div><div class="sub">${todayPays.length} receipt(s) · in-app total ${U.inr(appCollected)}</div></div>
       </div>
       <div class="panel">
         <div class="panel-head"><h2>Business-wise Collection</h2><span class="muted">click a card for its dues</span></div>
@@ -94,7 +95,7 @@
         </table></div>
       </div>
       <div class="panel">
-        <div class="panel-head"><h2>Recent Payments</h2><a href="#/collections" class="btn sm">View all →</a></div>
+        <div class="panel-head"><h2>Recent Payments</h2>${admin ? '<a href="#/collections" class="btn sm">View all →</a>' : ''}</div>
         <div class="table-scroll"><table><thead><tr><th>Date</th><th>Student</th><th>Mode</th><th class="t-right">Amount</th></tr></thead>
           <tbody>${recent}</tbody></table></div>
       </div>
@@ -124,6 +125,7 @@
   let studentsState = { q: '', grade: '', status: '', sort: 'name' };
   function students(params) {
     if (params && params.grade != null) studentsState.grade = params.grade;
+    if (params && params.status != null) studentsState.status = params.status;
     const grades = Array.from(new Set(Store.students.map(s => s.grade).filter(Boolean))).sort();
     const gradeOpts = ['<option value="">All grades</option>']
       .concat(grades.map(g => `<option value="${U.esc(g)}"${studentsState.grade === g ? ' selected' : ''}>${U.esc(g)}</option>`)).join('');
@@ -148,7 +150,8 @@
             <select id="stuGrade">${gradeOpts}</select>
             <select id="stuStatus">
               <option value="">All statuses</option>
-              <option value="pending"${studentsState.status === 'pending' ? ' selected' : ''}>Pending</option>
+              <option value="due"${studentsState.status === 'due' ? ' selected' : ''}>Has dues</option>
+              <option value="pending"${studentsState.status === 'pending' ? ' selected' : ''}>Not paid</option>
               <option value="partial"${studentsState.status === 'partial' ? ' selected' : ''}>Partial</option>
               <option value="paid"${studentsState.status === 'paid' ? ' selected' : ''}>Fully paid</option>
             </select>
@@ -171,6 +174,7 @@
       let rows = Store.students.filter(s => {
         if (studentsState.grade && s.grade !== studentsState.grade) return false;
         const t = Store.studentTotals(s);
+        if (studentsState.status === 'due' && !(t.balance > 0)) return false;
         if (studentsState.status === 'paid' && !(t.total > 0 && t.balance <= 0)) return false;
         if (studentsState.status === 'pending' && !(t.balance >= t.total && t.total > 0)) return false;
         if (studentsState.status === 'partial' && !(t.balance > 0 && t.balance < t.total)) return false;
@@ -854,7 +858,7 @@
       </div>
 
       <div class="panel">
-        <div class="panel-head"><h2>${U.esc(B.name)} — Collections</h2><a href="#/collections?business=${key}" class="btn sm">Open in Collections →</a></div>
+        <div class="panel-head"><h2>${U.esc(B.name)} — Collections</h2>${Store.isAdmin() ? `<a href="#/collections?business=${key}" class="btn sm">Open in Collections →</a>` : ''}</div>
         <div class="table-scroll"><table>
           <thead><tr><th>Date</th><th>Receipt</th><th>Student</th><th>For</th><th>Mode</th><th class="t-right">Amount</th><th></th></tr></thead>
           <tbody>${bizPayRows(key)}</tbody></table></div>

@@ -3,7 +3,7 @@
   'use strict';
 
   // routes allowed for the "account" role; everything else is admin-only
-  const ACCOUNT_ROUTES = { students: 1, student: 1, collect: 1 };
+  const ACCOUNT_ROUTES = { dashboard: 1, students: 1, student: 1, collect: 1, business: 1 };
 
   const Router = {
     render() { route(); },
@@ -34,9 +34,9 @@
     const { seg, params } = parseHash();
     let name = seg[0];
     if (!allowed(name)) {
-      // send accounts to their landing page
-      name = 'students';
-      if (location.hash.replace(/^#\/?/, '').split('/')[0] !== 'students') { location.hash = '#/students'; return; }
+      // send accounts to their landing page (dashboard)
+      name = 'dashboard';
+      if (location.hash.replace(/^#\/?/, '').split('/')[0] !== 'dashboard') { location.hash = '#/dashboard'; return; }
     }
     try {
       switch (name) {
@@ -49,7 +49,7 @@
         case 'reports': setActive('reports'); Views.reports(params); break;
         case 'users': setActive('users'); Views.users(); break;
         case 'data': setActive('data'); Views.data(); break;
-        default: location.hash = Store.isAdmin() ? '#/dashboard' : '#/students';
+        default: location.hash = '#/dashboard';
       }
     } catch (e) {
       console.error(e);
@@ -111,8 +111,8 @@
       wired = true;
     }
     document.getElementById('yearBadge').textContent = (Store.meta.school || 'AKB School') + ' · ' + (Store.meta.year || '');
-    // land admins on dashboard, accounts on students
-    if (!location.hash || location.hash === '#/' ) location.hash = Store.isAdmin() ? '#/dashboard' : '#/students';
+    // both roles land on the dashboard
+    if (!location.hash || location.hash === '#/' ) location.hash = '#/dashboard';
     route();
   }
 
