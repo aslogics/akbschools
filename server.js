@@ -74,7 +74,10 @@ function sendFile(filePath, res, onErr) {
     if (err) return onErr();
     const ext = path.extname(filePath).toLowerCase();
     const type = MIME[ext] || 'application/octet-stream';
-    const cache = ext === '.html' ? 'no-cache' : 'public, max-age=3600';
+    // HTML/JS/CSS must always revalidate so code updates show immediately after
+    // a redeploy; static images can cache for a day.
+    const fresh = (ext === '.html' || ext === '.js' || ext === '.css');
+    const cache = fresh ? 'no-cache' : 'public, max-age=86400';
     res.writeHead(200, { 'Content-Type': type, 'Cache-Control': cache });
     res.end(data);
   });
