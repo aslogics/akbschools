@@ -25,12 +25,22 @@
     uniform: 'Uniform & Accessories', transport: 'Transport Fees',
     extra_curricular: 'Extra Curricular Fees', evening_sports: 'Evening Sports'
   };
-  // Business owner per fee head (from Chairman Dashboard "BUSINESS CATEGORIES")
-  const BUSINESS = {
-    term: 'AKB School of Excellence', supplies: 'AKB & Co', app_fees: 'AKB School of Excellence',
-    uniform: 'AKB & Co', transport: 'Falcon Trading & Transport',
-    extra_curricular: 'AKB School of Excellence', evening_sports: 'AKB School of Excellence'
+  // The 4 businesses, each issuing its own receipt with its own logo
+  const BUSINESSES = {
+    school: { key: 'school', name: 'AKB School of Excellence', sub: 'Senior Secondary CBSE School', logo: 'assets/img/logo-school.svg', color: '#7f1d1d', prefix: 'AKB' },
+    sports: { key: 'sports', name: 'AKB Sports Academy', sub: 'One Team · One Passion · One Legacy', logo: 'assets/img/logo-sports.svg', color: '#7c1d2e', prefix: 'SA' },
+    co: { key: 'co', name: 'AKB & Co', sub: 'School Supplies · Games · Playing Courts', logo: 'assets/img/logo-co.svg', color: '#1e3a8a', prefix: 'CO' },
+    falcon: { key: 'falcon', name: 'Falcon Trading & Transport', sub: 'Transport Services', logo: 'assets/img/logo-falcon.svg', color: '#c2410c', prefix: 'FTT' }
   };
+  const BUSINESS_ORDER = ['school', 'co', 'falcon', 'sports'];
+  // fee head -> business key
+  const HEAD_BUSINESS = {
+    term: 'school', app_fees: 'school', extra_curricular: 'school',
+    supplies: 'co', uniform: 'co', transport: 'falcon', evening_sports: 'sports'
+  };
+  // legacy: fee head -> business display name (used by Chairman Dashboard)
+  const BUSINESS = {};
+  Object.keys(HEAD_BUSINESS).forEach(k => { BUSINESS[k] = BUSINESSES[HEAD_BUSINESS[k]].name; });
 
   let db = null;
   let useIDB = true;
@@ -41,7 +51,7 @@
     users: [],
     meta: {},
     currentUser: null,
-    ENTITIES, MODES, HEAD_ORDER, HEAD_LABELS, BUSINESS,
+    ENTITIES, MODES, HEAD_ORDER, HEAD_LABELS, BUSINESS, BUSINESSES, BUSINESS_ORDER, HEAD_BUSINESS,
 
     async init() {
       try {
@@ -142,40 +152,53 @@
       else localStorage.setItem('akb_meta', JSON.stringify(this.meta));
     },
 
-    /* ---- payments ---- */
+    /* ---- payments ----
+       A single collection is SPLIT by business, producing one receipt (and one
+       payment record) per business, each with its own logo & receipt number. */
     async addPayment(p) {
-      // p: {studentId, date, mode, entity, remarks, items:[{head,amount}]}
+      // p: {studentId, date, mode, remarks, items:[{head,amount}]}
       const student = this.getStudent(p.studentId);
       if (!student) throw new Error('Student not found');
-      this.meta.receiptSeq = (this.meta.receiptSeq || 0) + 1;
-      const seq = this.meta.receiptSeq;
-      const receiptNo = 'AKB/' + (this.meta.year || '2026-2027').split('-')[0] + '/' +
-        String(seq).padStart(5, '0');
-      let amount = 0;
+      const year = (this.meta.year || '2026-2027').split('-')[0];
+      this.meta.seqByBiz = this.meta.seqByBiz || {};
+      const createdAt = new Date().toISOString();
+      const groupId = U.uid(); // ties the split receipts of one transaction together
+
+      // group valid items by business
+      const groups = {};
       p.items.forEach(it => {
-        const amt = Number(it.amount) || 0;
-        if (amt <= 0) return;
-        amount += amt;
-        const h = student.fees[it.head];
-        if (h) { h.paid = (Number(h.paid) || 0) + amt; }
+        const amt = Number(it.amount) || 0; if (amt <= 0) return;
+        const biz = HEAD_BUSINESS[it.head] || 'school';
+        (groups[biz] = groups[biz] || []).push({ head: it.head, label: HEAD_LABELS[it.head] || it.head, amount: amt });
+        const h = student.fees[it.head]; if (h) h.paid = (Number(h.paid) || 0) + amt;
       });
       this.recompute(student);
-      const rec = {
-        id: U.uid(), receiptNo, seq,
-        studentId: student.id, studentName: student.name, grade: student.grade,
-        date: p.date || U.todayISO(),
-        mode: p.mode || 'Cash', entity: p.entity || ENTITIES[0],
-        remarks: p.remarks || '',
-        items: p.items.filter(it => (Number(it.amount) || 0) > 0)
-          .map(it => ({ head: it.head, label: HEAD_LABELS[it.head] || it.head, amount: Number(it.amount) })),
-        amount, createdAt: new Date().toISOString()
-      };
-      this.payments.push(rec);
-      if (useIDB) { await idbPut('payments', rec); await idbPut('students', student); }
+
+      const records = [];
+      BUSINESS_ORDER.concat(Object.keys(groups)).filter((v, i, a) => a.indexOf(v) === i).forEach(biz => {
+        const items = groups[biz]; if (!items || !items.length) return;
+        const B = BUSINESSES[biz];
+        this.meta.seqByBiz[biz] = (this.meta.seqByBiz[biz] || 0) + 1;
+        const seq = this.meta.seqByBiz[biz];
+        const rec = {
+          id: U.uid(), groupId,
+          receiptNo: B.prefix + '/' + year + '/' + String(seq).padStart(5, '0'), seq,
+          business: biz, businessName: B.name,
+          studentId: student.id, studentName: student.name, grade: student.grade,
+          date: p.date || U.todayISO(), mode: p.mode || 'Cash', remarks: p.remarks || '',
+          items, amount: items.reduce((a, x) => a + x.amount, 0), createdAt
+        };
+        records.push(rec); this.payments.push(rec);
+      });
+      // keep a running overall receipt count for stats
+      this.meta.receiptSeq = (this.meta.receiptSeq || 0) + records.length;
+
+      if (useIDB) { for (const r of records) await idbPut('payments', r); await idbPut('students', student); }
       else { localStorage.setItem('akb_payments', JSON.stringify(this.payments)); localStorage.setItem('akb_students', JSON.stringify(this.students)); }
       await this.persistMeta();
-      return rec;
+      return records; // array — one per business
     },
+    businessOfHead(k) { return HEAD_BUSINESS[k] || 'school'; },
 
     async deletePayment(id) {
       const idx = this.payments.findIndex(p => p.id === id);

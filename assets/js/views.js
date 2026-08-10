@@ -29,6 +29,19 @@
     const todaySum = todayPays.reduce((a, p) => a + p.amount, 0);
     const appCollected = Store.payments.reduce((a, p) => a + p.amount, 0);
 
+    // business-wise summary (fees mapped to their business)
+    const bizSum = Store.BUSINESS_ORDER.map(bk => {
+      let total = 0, paid = 0;
+      Store.HEAD_ORDER.forEach(k => { if (Store.businessOfHead(k) === bk) students.forEach(s => { const h = s.fees[k]; if (h) { total += h.total; paid += h.paid; } }); });
+      return { bk, B: Store.BUSINESSES[bk], total, paid, bal: total - paid };
+    });
+    const bizCards = bizSum.map(b => `
+      <div class="card link" data-nav="#/reports?business=${b.bk}" style="border-left:4px solid ${b.B.color}">
+        <div class="biz-head"><img class="biz-logo" src="${b.B.logo}" alt=""/><div class="k" style="margin:0">${U.esc(b.B.name)}</div></div>
+        <div class="v" style="font-size:20px">${U.inr(b.paid)}</div>
+        <div class="sub">of ${U.inr(b.total)} · <span style="color:${b.bal > 0 ? 'var(--red)' : 'var(--green)'}">${U.inr(b.bal)} due</span></div>
+      </div>`).join('');
+
     const byGrade = {};
     students.forEach(s => {
       const g = s.grade || '—'; const t = Store.studentTotals(s);
@@ -62,10 +75,14 @@
         <a href="#/collect" class="btn primary">🧾 Receive Payment</a>
       </div>
       <div class="cards">
-        <div class="card accent-blue"><div class="k">Total Fees</div><div class="v">${U.inr(gt)}</div><div class="sub">${students.length} students</div></div>
-        <div class="card accent-green"><div class="k">Collected</div><div class="v">${U.inr(gp)}</div><div class="sub">${gt ? Math.round(gp / gt * 100) : 0}% of total</div></div>
-        <div class="card accent-red"><div class="k">Outstanding</div><div class="v">${U.inr(gb)}</div><div class="sub">${defaulters} students with dues</div></div>
-        <div class="card accent-amber"><div class="k">Collected Today</div><div class="v">${U.inr(todaySum)}</div><div class="sub">${todayPays.length} receipt(s) · in-app total ${U.inr(appCollected)}</div></div>
+        <div class="card accent-blue link" data-nav="#/students"><div class="k">Total Fees</div><div class="v">${U.inr(gt)}</div><div class="sub">${students.length} students</div></div>
+        <div class="card accent-green link" data-nav="#/collections"><div class="k">Collected</div><div class="v">${U.inr(gp)}</div><div class="sub">${gt ? Math.round(gp / gt * 100) : 0}% of total</div></div>
+        <div class="card accent-red link" data-nav="#/reports"><div class="k">Outstanding</div><div class="v">${U.inr(gb)}</div><div class="sub">${defaulters} students with dues</div></div>
+        <div class="card accent-amber link" data-nav="#/collections"><div class="k">Collected Today</div><div class="v">${U.inr(todaySum)}</div><div class="sub">${todayPays.length} receipt(s) · in-app total ${U.inr(appCollected)}</div></div>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><h2>Business-wise Collection</h2><span class="muted">click a card for its dues</span></div>
+        <div class="panel-body pad"><div class="cards" style="margin:0">${bizCards}</div></div>
       </div>
       <div class="panel">
         <div class="panel-head"><h2>Fee Category Summary</h2><span class="muted">mirrors the “SUMMARY” sheet</span></div>
@@ -86,8 +103,21 @@
         <div class="table-scroll"><table><thead><tr><th>Grade</th><th class="t-right">Students</th><th class="t-right">Total</th><th class="t-right">Paid</th><th class="t-right">Outstanding</th></tr></thead>
           <tbody>${gradeRows}</tbody></table></div>
       </div>`;
+    bindNav();
     $$('[data-grade]').forEach(tr => tr.onclick = () => { location.hash = '#/students?grade=' + encodeURIComponent(tr.dataset.grade); });
     $$('[data-rcpt]').forEach(tr => tr.onclick = () => { const p = Store.payments.find(x => x.id === tr.dataset.rcpt); if (p) Receipt.open(p); });
+  }
+
+  // clickable KPI cards / links
+  function bindNav(root) {
+    $$('[data-nav]', root).forEach(el => el.onclick = () => { location.hash = el.dataset.nav; });
+  }
+  // shared KPI card builder
+  function kpi(label, value, opts) {
+    opts = opts || {};
+    const nav = opts.nav ? ` link" data-nav="${opts.nav}` : '';
+    const accent = opts.accent ? ' accent-' + opts.accent : '';
+    return `<div class="card${accent}${nav}"><div class="k">${U.esc(label)}</div><div class="v">${value}</div>${opts.sub ? `<div class="sub">${opts.sub}</div>` : ''}</div>`;
   }
 
   /* -------------------------------------------------- Students list */
@@ -98,10 +128,18 @@
     const gradeOpts = ['<option value="">All grades</option>']
       .concat(grades.map(g => `<option value="${U.esc(g)}"${studentsState.grade === g ? ' selected' : ''}>${U.esc(g)}</option>`)).join('');
 
+    let gt = 0, gp = 0, defaulters = 0;
+    Store.students.forEach(s => { const t = Store.studentTotals(s); gt += t.total; gp += t.paid; if (t.balance > 0) defaulters++; });
     view().innerHTML = `
       <div class="page-head">
         <div><h1>Students</h1><p>${Store.students.length} enrolled · click a row to view fees & the dashboard</p></div>
         <button class="btn" id="expStudents">⬇ Export CSV</button>
+      </div>
+      <div class="cards">
+        ${kpi('Students', Store.students.length, { accent: 'blue' })}
+        ${kpi('Total Billed', U.inr(gt), { accent: 'blue' })}
+        ${kpi('Collected', U.inr(gp), { accent: 'green', sub: (gt ? Math.round(gp / gt * 100) : 0) + '% collected', nav: '#/collections' })}
+        ${kpi('Outstanding', U.inr(gt - gp), { accent: 'red', sub: defaulters + ' with dues', nav: '#/reports' })}
       </div>
       <div class="panel">
         <div class="panel-head">
@@ -161,6 +199,7 @@
     $('#stuStatus').onchange = e => { studentsState.status = e.target.value; apply(); };
     $('#stuSort').onchange = e => { studentsState.sort = e.target.value; apply(); };
     $('#expStudents').onclick = exportStudentsCSV;
+    bindNav();
     apply();
   }
 
@@ -314,7 +353,7 @@
       <div class="panel">
         <div class="panel-head"><h2>Payment History</h2></div>
         <div class="table-scroll"><table>
-          <thead><tr><th>Date</th><th>Receipt</th><th>For</th><th>Mode</th><th>Account</th><th class="t-right">Amount</th><th></th></tr></thead>
+          <thead><tr><th>Date</th><th>Receipt</th><th>For</th><th>Mode</th><th>Business</th><th class="t-right">Amount</th><th></th></tr></thead>
           <tbody>${paymentHistoryRows(s.id, true)}</tbody></table></div>
       </div>`;
 
@@ -382,7 +421,7 @@
       <td>${U.fmtDate(p.date)}</td><td class="mono">${U.esc(p.receiptNo)}</td>
       <td>${p.items.map(i => U.esc(i.label)).join(', ')}</td>
       <td><span class="pill-mode">${U.esc(p.mode)}</span></td>
-      ${withAccount ? `<td class="muted" style="font-size:12px">${U.esc(p.entity)}</td>` : ''}
+      ${withAccount ? `<td class="muted" style="font-size:12px">${U.esc(p.businessName || p.entity || '')}</td>` : ''}
       <td class="num" style="color:var(--green);font-weight:600">${U.inr(p.amount)}</td>
       <td class="t-right"><button class="btn sm" data-print="${p.id}">🖨️</button> <button class="btn sm danger" data-del="${p.id}">✕</button></td></tr>`).join('')
       || `<tr><td colspan="${withAccount ? 7 : 6}" class="empty">No payments recorded in the app for this student.</td></tr>`;
@@ -474,9 +513,10 @@
     const heads = Store.HEAD_ORDER.filter(k => { const h = s.fees[k]; return h && (h.total > 0 || h.paid > 0); });
     const rows = heads.map(k => {
       const h = s.fees[k]; const paidoff = h.balance <= 0;
+      const B = Store.BUSINESSES[Store.businessOfHead(k)];
       return `<div class="fee-row ${paidoff ? 'paidoff' : ''}">
         <input type="checkbox" class="fh-chk" data-head="${k}" ${!paidoff ? 'checked' : ''} ${paidoff ? 'disabled' : ''}/>
-        <div><div class="fh-label">${U.esc(h.label)}</div><div class="muted" style="font-size:11px">Paid ${U.inr(h.paid)} of ${U.inr(h.total)}</div></div>
+        <div><div class="fh-label">${U.esc(h.label)}</div><div class="muted" style="font-size:11px">${U.esc(B.name)} · Paid ${U.inr(h.paid)} of ${U.inr(h.total)}</div></div>
         <div class="fh-bal">Bal ${U.inr(h.balance)}</div>
         <input type="number" class="fh-amt" data-head="${k}" min="0" step="1" value="${paidoff ? 0 : Math.max(0, h.balance)}" ${paidoff ? 'disabled' : ''}/>
       </div>`;
@@ -487,12 +527,12 @@
         <div class="modal-body">
           <div class="muted" style="margin-bottom:10px">${U.esc(s.grade || '')} · ID ${U.esc(s.id)} · Outstanding <b style="color:var(--red)">${U.inr(Store.studentTotals(s).balance)}</b></div>
           <div id="feeRows">${rows}</div>
-          <div class="grid3" style="margin-top:16px">
+          <div class="grid2" style="margin-top:16px">
             <div class="field"><label>Date</label><input type="date" id="payDate" value="${U.todayISO()}"/></div>
             <div class="field"><label>Mode</label><select id="payMode">${Store.MODES.map(m => `<option>${U.esc(m)}</option>`).join('')}</select></div>
-            <div class="field"><label>Received in</label><select id="payEntity">${Store.ENTITIES.map(e => `<option>${U.esc(e)}</option>`).join('')}</select></div>
           </div>
           <div class="field"><label>Remarks (optional)</label><input id="payRemarks" placeholder="e.g. cheque no., note"/></div>
+          <div class="muted" style="font-size:11px;margin-bottom:6px">Each fee is receipted under its own business — a separate receipt prints per business.</div>
           <div style="text-align:right;font-size:16px;font-weight:700;margin-top:6px">Total: <span id="payTotal" style="color:var(--green)">₹0</span></div>
         </div>
         <div class="modal-foot"><button class="btn" id="payCancel">Cancel</button><button class="btn green" id="paySave">Save &amp; Print Receipt</button></div>
@@ -512,16 +552,27 @@
       const items = [];
       $$('.fh-amt', root).forEach(inp => { const chk = $(`.fh-chk[data-head="${inp.dataset.head}"]`, root); const amt = Number(inp.value) || 0; if (chk && chk.checked && amt > 0) items.push({ head: inp.dataset.head, amount: amt }); });
       if (!items.length) { U.toast('Enter at least one amount', 'error'); return; }
-      const rec = await Store.addPayment({ studentId, date: $('#payDate', root).value, mode: $('#payMode', root).value, entity: $('#payEntity', root).value, remarks: $('#payRemarks', root).value, items });
-      close(); U.toast('Payment saved · ' + rec.receiptNo, 'success'); Receipt.open(rec);
+      const recs = await Store.addPayment({ studentId, date: $('#payDate', root).value, mode: $('#payMode', root).value, remarks: $('#payRemarks', root).value, items });
+      close();
+      U.toast('Payment saved · ' + recs.length + ' receipt' + (recs.length > 1 ? 's' : ''), 'success');
+      Receipt.open(recs);
       if (location.hash.indexOf('#/student/') === 0) studentDetail(studentId); else Router.render();
     };
   }
 
   /* -------------------------------------------------- Collect (quick) */
   function collect() {
+    const today = U.todayISO();
+    const todayPays = Store.payments.filter(p => p.date === today);
+    const todaySum = todayPays.reduce((a, p) => a + p.amount, 0);
+    const defaulters = Store.students.filter(s => Store.studentTotals(s).balance > 0).length;
     view().innerHTML = `
       <div class="page-head"><div><h1>Receive Payment</h1><p>Search a student to record a fee payment</p></div></div>
+      <div class="cards">
+        ${kpi('Collected Today', U.inr(todaySum), { accent: 'green', sub: todayPays.length + ' receipt(s)', nav: '#/collections' })}
+        ${kpi('Students with Dues', defaulters, { accent: 'red', nav: '#/reports' })}
+        ${kpi('Receipts Issued', Store.meta.receiptSeq || 0, { accent: 'amber' })}
+      </div>
       <div class="panel">
         <div class="panel-head"><div class="toolbar" style="width:100%"><input id="colSearch" type="search" placeholder="Type student name, ID, or parent name…" style="flex:1;min-width:240px" autofocus/></div></div>
         <div class="table-scroll"><table><thead><tr><th>Student</th><th>Grade</th><th class="t-right">Balance</th><th></th></tr></thead><tbody id="colBody"></tbody></table></div>
@@ -542,22 +593,25 @@
       $$('[data-open]').forEach(td => td.onclick = () => location.hash = '#/student/' + encodeURIComponent(td.dataset.open));
     }
     $('#colSearch').oninput = U.debounce(e => apply(e.target.value), 150);
+    bindNav();
     apply('');
   }
 
   /* -------------------------------------------------- Collections */
-  let colState = { from: '', to: '', entity: '', mode: '' };
-  function collections() {
+  let colState = { from: '', to: '', business: '', mode: '' };
+  function collections(params) {
+    if (params && params.business != null) colState.business = params.business;
     const pays = Store.payments;
     if (!colState.from && pays.length) { const d = pays.map(p => p.date).sort(); colState.from = d[0]; colState.to = d[d.length - 1]; }
     if (!colState.from) { colState.from = U.todayISO(); colState.to = U.todayISO(); }
     view().innerHTML = `
-      <div class="page-head"><div><h1>Collections</h1><p>Payments recorded in the app · daily & entity summary</p></div><button class="btn" id="expCol">⬇ Export CSV</button></div>
+      <div class="page-head"><div><h1>Collections</h1><p>Payments recorded in the app · daily & business summary</p></div><button class="btn" id="expCol">⬇ Export CSV</button></div>
       <div class="panel"><div class="panel-head"><div class="toolbar">
         <label class="muted">From <input type="date" id="cFrom" value="${colState.from}"/></label>
         <label class="muted">To <input type="date" id="cTo" value="${colState.to}"/></label>
-        <select id="cEntity"><option value="">All accounts</option>${Store.ENTITIES.map(e => `<option${colState.entity === e ? ' selected' : ''}>${U.esc(e)}</option>`).join('')}</select>
+        <select id="cBiz"><option value="">All businesses</option>${Store.BUSINESS_ORDER.map(b => `<option value="${b}"${colState.business === b ? ' selected' : ''}>${U.esc(Store.BUSINESSES[b].name)}</option>`).join('')}</select>
         <select id="cMode"><option value="">All modes</option>${Store.MODES.map(m => `<option${colState.mode === m ? ' selected' : ''}>${U.esc(m)}</option>`).join('')}</select>
+        <button class="btn sm" id="cClear">Clear</button>
       </div></div></div>
       <div id="colContent"></div>`;
     function isCash(m) { return m === 'Cash'; }
@@ -565,96 +619,168 @@
       const list = Store.payments.filter(p => {
         if (colState.from && p.date < colState.from) return false;
         if (colState.to && p.date > colState.to) return false;
-        if (colState.entity && p.entity !== colState.entity) return false;
+        if (colState.business && (p.business || 'school') !== colState.business) return false;
         if (colState.mode && p.mode !== colState.mode) return false;
         return true;
       }).sort((a, b) => a.date < b.date ? 1 : (a.date > b.date ? -1 : (a.createdAt < b.createdAt ? 1 : -1)));
       const total = list.reduce((a, p) => a + p.amount, 0);
       const cash = list.filter(p => isCash(p.mode)).reduce((a, p) => a + p.amount, 0);
       const online = total - cash;
+      // business KPI cards
+      const bizCards = Store.BUSINESS_ORDER.map(bk => {
+        const B = Store.BUSINESSES[bk];
+        const sum = list.filter(p => (p.business || 'school') === bk).reduce((a, p) => a + p.amount, 0);
+        return `<div class="card link" data-nav="#/collections?business=${bk}" style="border-left:4px solid ${B.color}">
+          <div class="biz-head"><img class="biz-logo" src="${B.logo}" alt=""/><div class="k" style="margin:0">${U.esc(B.name)}</div></div>
+          <div class="v" style="font-size:20px">${U.inr(sum)}</div></div>`;
+      }).join('');
       const days = {};
       list.forEach(p => { days[p.date] = days[p.date] || { cash: 0, online: 0, total: 0, n: 0 }; days[p.date].total += p.amount; days[p.date].n++; if (isCash(p.mode)) days[p.date].cash += p.amount; else days[p.date].online += p.amount; });
       const dayRows = Object.keys(days).sort().reverse().map(d => { const x = days[d]; return `<tr><td>${U.fmtDate(d)}</td><td class="num">${U.inr(x.cash)}</td><td class="num">${U.inr(x.online)}</td><td class="num" style="font-weight:700">${U.inr(x.total)}</td><td class="num">${x.n}</td></tr>`; }).join('') || '<tr><td colspan="5" class="empty">No collections in this range.</td></tr>';
-      const ents = {};
-      list.forEach(p => { ents[p.entity] = ents[p.entity] || { cash: 0, online: 0, total: 0 }; ents[p.entity].total += p.amount; if (isCash(p.mode)) ents[p.entity].cash += p.amount; else ents[p.entity].online += p.amount; });
-      const entRows = Object.keys(ents).sort().map(e => { const x = ents[e]; return `<tr><td>${U.esc(e)}</td><td class="num">${U.inr(x.cash)}</td><td class="num">${U.inr(x.online)}</td><td class="num" style="font-weight:700">${U.inr(x.total)}</td></tr>`; }).join('') || '<tr><td colspan="4" class="empty">—</td></tr>';
+      const biz = {};
+      list.forEach(p => { const b = p.businessName || 'AKB School of Excellence'; biz[b] = biz[b] || { cash: 0, online: 0, total: 0 }; biz[b].total += p.amount; if (isCash(p.mode)) biz[b].cash += p.amount; else biz[b].online += p.amount; });
+      const bizRows = Object.keys(biz).sort().map(e => { const x = biz[e]; return `<tr><td>${U.esc(e)}</td><td class="num">${U.inr(x.cash)}</td><td class="num">${U.inr(x.online)}</td><td class="num" style="font-weight:700">${U.inr(x.total)}</td></tr>`; }).join('') || '<tr><td colspan="4" class="empty">—</td></tr>';
       const txnRows = list.slice(0, 400).map(p => `<tr class="clickable" data-rcpt="${p.id}"><td>${U.fmtDate(p.date)}</td><td class="mono">${U.esc(p.receiptNo)}</td>
           <td>${U.esc(p.studentName)}<div class="muted" style="font-size:11px">${U.esc(p.grade || '')}</div></td>
           <td>${p.items.map(i => U.esc(i.label)).join(', ')}</td><td><span class="pill-mode">${U.esc(p.mode)}</span></td>
-          <td class="muted" style="font-size:12px">${U.esc(p.entity)}</td><td class="num" style="color:var(--green);font-weight:600">${U.inr(p.amount)}</td></tr>`).join('') || '<tr><td colspan="7" class="empty">No transactions.</td></tr>';
+          <td class="muted" style="font-size:12px">${U.esc(p.businessName || '')}</td><td class="num" style="color:var(--green);font-weight:600">${U.inr(p.amount)}</td></tr>`).join('') || '<tr><td colspan="7" class="empty">No transactions.</td></tr>';
       $('#colContent').innerHTML = `
         <div class="cards">
-          <div class="card accent-green"><div class="k">Total Collected</div><div class="v">${U.inr(total)}</div><div class="sub">${list.length} receipts</div></div>
-          <div class="card accent-blue"><div class="k">Cash</div><div class="v">${U.inr(cash)}</div></div>
-          <div class="card accent-amber"><div class="k">Bank / Online</div><div class="v">${U.inr(online)}</div></div>
+          ${kpi('Total Collected', U.inr(total), { accent: 'green', sub: list.length + ' receipts' })}
+          ${kpi('Cash', U.inr(cash), { accent: 'blue' })}
+          ${kpi('Bank / Online', U.inr(online), { accent: 'amber' })}
         </div>
+        <div class="panel"><div class="panel-head"><h2>Business-wise</h2></div><div class="panel-body pad"><div class="cards" style="margin:0">${bizCards}</div></div></div>
         <div class="panel"><div class="panel-head"><h2>Daily Summary</h2></div><div class="table-scroll"><table><thead><tr><th>Date</th><th class="t-right">Cash</th><th class="t-right">Bank/Online</th><th class="t-right">Total</th><th class="t-right">Receipts</th></tr></thead><tbody>${dayRows}</tbody></table></div></div>
-        <div class="panel"><div class="panel-head"><h2>By Account / Entity</h2></div><div class="table-scroll"><table><thead><tr><th>Account</th><th class="t-right">Cash</th><th class="t-right">Bank/Online</th><th class="t-right">Total</th></tr></thead><tbody>${entRows}</tbody></table></div></div>
-        <div class="panel"><div class="panel-head"><h2>Transactions</h2><span class="muted">latest 400</span></div><div class="table-scroll"><table><thead><tr><th>Date</th><th>Receipt</th><th>Student</th><th>For</th><th>Mode</th><th>Account</th><th class="t-right">Amount</th></tr></thead><tbody>${txnRows}</tbody></table></div></div>`;
+        <div class="panel"><div class="panel-head"><h2>By Business</h2></div><div class="table-scroll"><table><thead><tr><th>Business</th><th class="t-right">Cash</th><th class="t-right">Bank/Online</th><th class="t-right">Total</th></tr></thead><tbody>${bizRows}</tbody></table></div></div>
+        <div class="panel"><div class="panel-head"><h2>Transactions</h2><span class="muted">latest 400</span></div><div class="table-scroll"><table><thead><tr><th>Date</th><th>Receipt</th><th>Student</th><th>For</th><th>Mode</th><th>Business</th><th class="t-right">Amount</th></tr></thead><tbody>${txnRows}</tbody></table></div></div>`;
       $$('[data-rcpt]').forEach(tr => tr.onclick = () => { const p = Store.payments.find(x => x.id === tr.dataset.rcpt); if (p) Receipt.open(p); });
+      bindNav();
     }
     $('#cFrom').onchange = e => { colState.from = e.target.value; render(); };
     $('#cTo').onchange = e => { colState.to = e.target.value; render(); };
-    $('#cEntity').onchange = e => { colState.entity = e.target.value; render(); };
+    $('#cBiz').onchange = e => { colState.business = e.target.value; render(); };
     $('#cMode').onchange = e => { colState.mode = e.target.value; render(); };
+    $('#cClear').onclick = () => { colState.business = ''; colState.mode = ''; collections(); };
     $('#expCol').onclick = () => {
-      const list = Store.payments.filter(p => (!colState.from || p.date >= colState.from) && (!colState.to || p.date <= colState.to) && (!colState.entity || p.entity === colState.entity) && (!colState.mode || p.mode === colState.mode));
-      const rows = [['Date', 'Receipt', 'Student ID', 'Student', 'Grade', 'For', 'Mode', 'Account', 'Amount']];
-      list.forEach(p => rows.push([p.date, p.receiptNo, p.studentId, p.studentName, p.grade, p.items.map(i => i.label).join('; '), p.mode, p.entity, p.amount]));
+      const list = Store.payments.filter(p => (!colState.from || p.date >= colState.from) && (!colState.to || p.date <= colState.to) && (!colState.business || (p.business || 'school') === colState.business) && (!colState.mode || p.mode === colState.mode));
+      const rows = [['Date', 'Receipt', 'Business', 'Student ID', 'Student', 'Grade', 'For', 'Mode', 'Amount']];
+      list.forEach(p => rows.push([p.date, p.receiptNo, p.businessName || '', p.studentId, p.studentName, p.grade, p.items.map(i => i.label).join('; '), p.mode, p.amount]));
       U.download('akb_collections.csv', U.toCSV(rows), 'text/csv'); U.toast('Exported collections CSV', 'success');
     };
     render();
   }
 
-  /* -------------------------------------------------- Reports */
-  let repState = { grade: '', head: '' };
-  function reports() {
+  /* -------------------------------------------------- Reports (multi-filter) */
+  let repState = { q: '', grade: '', business: '', head: '', status: 'due', sort: 'balance' };
+  function reports(params) {
+    if (params && params.business != null) { repState.business = params.business; }
     const grades = Array.from(new Set(Store.students.map(s => s.grade).filter(Boolean))).sort();
-    const cats = Store.HEAD_ORDER.map(k => { let total = 0, paid = 0; Store.students.forEach(s => { const h = s.fees[k]; if (h) { total += h.total; paid += h.paid; } }); return { label: Store.HEAD_LABELS[k], total, paid, bal: total - paid }; });
+    const cats = Store.HEAD_ORDER.map(k => { let total = 0, paid = 0; Store.students.forEach(s => { const h = s.fees[k]; if (h) { total += h.total; paid += h.paid; } }); return { key: k, label: Store.HEAD_LABELS[k], biz: Store.BUSINESSES[Store.businessOfHead(k)].name, total, paid, bal: total - paid }; });
     const gt = cats.reduce((a, c) => a + c.total, 0), gp = cats.reduce((a, c) => a + c.paid, 0);
+    const defaulters = Store.students.filter(s => Store.studentTotals(s).balance > 0).length;
+    // business summary
+    const bizSum = Store.BUSINESS_ORDER.map(bk => { const c = cats.filter(x => Store.businessOfHead(x.key) === bk); return { bk, B: Store.BUSINESSES[bk], total: c.reduce((a, x) => a + x.total, 0), paid: c.reduce((a, x) => a + x.paid, 0) }; });
+
     view().innerHTML = `
-      <div class="page-head"><div><h1>Reports</h1><p>Fee category summary & outstanding dues</p></div></div>
+      <div class="page-head"><div><h1>Reports</h1><p>Filter dues by grade, business, fee head & status</p></div></div>
+      <div class="cards">
+        ${kpi('Total Billed', U.inr(gt), { accent: 'blue' })}
+        ${kpi('Collected', U.inr(gp), { accent: 'green', sub: (gt ? Math.round(gp / gt * 100) : 0) + '%' })}
+        ${kpi('Outstanding', U.inr(gt - gp), { accent: 'red' })}
+        ${kpi('Defaulters', defaulters, { accent: 'amber' })}
+      </div>
+
+      <div class="panel"><div class="panel-head"><h2>Business-wise Summary</h2></div>
+        <div class="table-scroll"><table><thead><tr><th>Business</th><th class="t-right">Billed</th><th class="t-right">Collected</th><th class="t-right">Outstanding</th><th class="t-right">%</th></tr></thead>
+        <tbody>${bizSum.map(b => `<tr class="clickable" data-nav="#/reports?business=${b.bk}"><td><span class="biz-head"><img class="biz-logo" src="${b.B.logo}" alt=""/>${U.esc(b.B.name)}</span></td>
+          <td class="num">${U.inr(b.total)}</td><td class="num" style="color:var(--green)">${U.inr(b.paid)}</td>
+          <td class="num" style="color:${b.total - b.paid > 0 ? 'var(--red)' : 'var(--muted)'}">${U.inr(b.total - b.paid)}</td>
+          <td class="num">${b.total ? Math.round(b.paid / b.total * 100) : 0}%</td></tr>`).join('')}</tbody></table></div></div>
+
       <div class="panel"><div class="panel-head"><h2>Fee Category Summary</h2><button class="btn sm" id="expCat">⬇ CSV</button></div>
-        <div class="table-scroll"><table><thead><tr><th>Category</th><th class="t-right">Amount</th><th class="t-right">Received</th><th class="t-right">Receivable</th><th class="t-right">% Collected</th></tr></thead>
-        <tbody>${cats.map(c => `<tr><td>${U.esc(c.label)}</td><td class="num">${U.inr(c.total)}</td><td class="num" style="color:var(--green)">${U.inr(c.paid)}</td><td class="num" style="color:${c.bal > 0 ? 'var(--red)' : 'var(--muted)'}">${U.inr(c.bal)}</td><td class="num">${c.total ? Math.round(c.paid / c.total * 100) : 0}%</td></tr>`).join('')}</tbody>
-        <tfoot><tr style="font-weight:700;background:#f8fafc"><td>TOTAL</td><td class="num">${U.inr(gt)}</td><td class="num" style="color:var(--green)">${U.inr(gp)}</td><td class="num" style="color:var(--red)">${U.inr(gt - gp)}</td><td class="num">${gt ? Math.round(gp / gt * 100) : 0}%</td></tr></tfoot></table></div></div>
+        <div class="table-scroll"><table><thead><tr><th>Category</th><th>Business</th><th class="t-right">Amount</th><th class="t-right">Received</th><th class="t-right">Receivable</th><th class="t-right">%</th></tr></thead>
+        <tbody>${cats.map(c => `<tr><td>${U.esc(c.label)}</td><td class="muted" style="font-size:12px">${U.esc(c.biz)}</td><td class="num">${U.inr(c.total)}</td><td class="num" style="color:var(--green)">${U.inr(c.paid)}</td><td class="num" style="color:${c.bal > 0 ? 'var(--red)' : 'var(--muted)'}">${U.inr(c.bal)}</td><td class="num">${c.total ? Math.round(c.paid / c.total * 100) : 0}%</td></tr>`).join('')}</tbody>
+        <tfoot><tr style="font-weight:700;background:#f8fafc"><td>TOTAL</td><td></td><td class="num">${U.inr(gt)}</td><td class="num" style="color:var(--green)">${U.inr(gp)}</td><td class="num" style="color:var(--red)">${U.inr(gt - gp)}</td><td class="num">${gt ? Math.round(gp / gt * 100) : 0}%</td></tr></tfoot></table></div></div>
+
       <div class="panel">
-        <div class="panel-head"><h2>Outstanding Dues (Defaulters)</h2>
+        <div class="panel-head"><h2>Outstanding Dues</h2>
           <div class="toolbar">
+            <input id="rQ" type="search" placeholder="name / ID / phone" value="${U.esc(repState.q)}" style="min-width:150px"/>
             <select id="rGrade"><option value="">All grades</option>${grades.map(g => `<option${repState.grade === g ? ' selected' : ''}>${U.esc(g)}</option>`).join('')}</select>
+            <select id="rBiz"><option value="">All businesses</option>${Store.BUSINESS_ORDER.map(b => `<option value="${b}"${repState.business === b ? ' selected' : ''}>${U.esc(Store.BUSINESSES[b].name)}</option>`).join('')}</select>
             <select id="rHead"><option value="">Any fee head</option>${Store.HEAD_ORDER.map(k => `<option value="${k}"${repState.head === k ? ' selected' : ''}>${U.esc(Store.HEAD_LABELS[k])}</option>`).join('')}</select>
+            <select id="rStatus">
+              <option value="due"${repState.status === 'due' ? ' selected' : ''}>Has dues</option>
+              <option value="partial"${repState.status === 'partial' ? ' selected' : ''}>Partial</option>
+              <option value="pending"${repState.status === 'pending' ? ' selected' : ''}>Not paid</option>
+              <option value="all"${repState.status === 'all' ? ' selected' : ''}>All</option>
+            </select>
+            <select id="rSort">
+              <option value="balance"${repState.sort === 'balance' ? ' selected' : ''}>Sort: Balance ↓</option>
+              <option value="name"${repState.sort === 'name' ? ' selected' : ''}>Sort: Name</option>
+              <option value="grade"${repState.sort === 'grade' ? ' selected' : ''}>Sort: Grade</option>
+            </select>
             <button class="btn sm" id="expDue">⬇ CSV</button>
           </div></div>
         <div class="table-scroll"><table><thead><tr><th>Student</th><th>Grade</th><th>Contact</th><th class="t-right">Total</th><th class="t-right">Paid</th><th class="t-right">Outstanding</th><th></th></tr></thead><tbody id="dueBody"></tbody></table></div>
         <div class="panel-body pad" id="dueFoot"></div>
       </div>`;
-    function dues() {
+
+    // outstanding relevant to the active filter: head > business > overall
+    function bizBal(r, bk) { let s = 0; Store.HEAD_ORDER.forEach(k => { if (Store.businessOfHead(k) === bk) s += (r.s.fees[k] || {}).balance || 0; }); return s; }
+    function balOf(r) {
+      if (repState.head) return (r.s.fees[repState.head] || {}).balance || 0;
+      if (repState.business) return bizBal(r, repState.business);
+      return r.t.balance;
+    }
+    function filtered() {
+      const q = repState.q.trim().toLowerCase();
       let rows = Store.students.map(s => ({ s, t: Store.studentTotals(s) }));
-      if (repState.head) rows = rows.filter(r => (r.s.fees[repState.head] || {}).balance > 0); else rows = rows.filter(r => r.t.balance > 0);
       if (repState.grade) rows = rows.filter(r => r.s.grade === repState.grade);
-      rows.sort((a, b) => b.t.balance - a.t.balance);
+      if (q) rows = rows.filter(r => (r.s.name + ' ' + r.s.id + ' ' + (r.s.contact || '')).toLowerCase().indexOf(q) >= 0);
+      // status (evaluated against the filter-relevant balance)
+      rows = rows.filter(r => {
+        const b = balOf(r);
+        if (repState.status === 'due') return b > 0;
+        if (repState.status === 'pending') return r.t.total > 0 && r.t.paid <= 0;
+        if (repState.status === 'partial') return r.t.balance > 0 && r.t.balance < r.t.total;
+        return true; // all
+      });
+      rows.sort((a, b) => {
+        if (repState.sort === 'name') return a.s.name.localeCompare(b.s.name);
+        if (repState.sort === 'grade') return (a.s.grade || '').localeCompare(b.s.grade || '');
+        return balOf(b) - balOf(a);
+      });
+      return rows;
+    }
+    function dues() {
+      const rows = filtered();
       $('#dueBody').innerHTML = rows.slice(0, 1000).map(r => `<tr class="clickable" data-id="${U.esc(r.s.id)}">
           <td><b>${U.esc(r.s.name)}</b><div class="muted" style="font-size:11px">ID ${U.esc(r.s.id)}</div></td>
           <td>${U.esc(r.s.grade || '')}</td><td class="mono">${U.esc(r.s.contact || '')}</td>
           <td class="num">${U.inr(r.t.total)}</td><td class="num" style="color:var(--green)">${U.inr(r.t.paid)}</td>
-          <td class="num" style="color:var(--red);font-weight:700">${U.inr(repState.head ? (r.s.fees[repState.head] || {}).balance : r.t.balance)}</td>
-          <td class="t-right"><button class="btn green sm" data-pay="${U.esc(r.s.id)}">Collect</button></td></tr>`).join('') || '<tr><td colspan="7" class="empty">No outstanding dues 🎉</td></tr>';
-      const sum = rows.reduce((a, r) => a + (repState.head ? (r.s.fees[repState.head] || {}).balance : r.t.balance), 0);
-      $('#dueFoot').innerHTML = `<b>${rows.length}</b> students · Total outstanding <b style="color:var(--red)">${U.inr(sum)}</b>`;
+          <td class="num" style="color:${balOf(r) > 0 ? 'var(--red)' : 'var(--muted)'};font-weight:700">${U.inr(balOf(r))}</td>
+          <td class="t-right"><button class="btn green sm" data-pay="${U.esc(r.s.id)}">Collect</button></td></tr>`).join('') || '<tr><td colspan="7" class="empty">No students match these filters.</td></tr>';
+      const sum = rows.reduce((a, r) => a + balOf(r), 0);
+      $('#dueFoot').innerHTML = `<b>${rows.length}</b> students · Total ${repState.head ? U.esc(Store.HEAD_LABELS[repState.head]) + ' ' : ''}outstanding <b style="color:var(--red)">${U.inr(sum)}</b>`;
       $$('#dueBody [data-id]').forEach(tr => tr.onclick = e => { if (e.target.dataset.pay) return; location.hash = '#/student/' + encodeURIComponent(tr.dataset.id); });
       $$('#dueBody [data-pay]').forEach(b => b.onclick = ev => { ev.stopPropagation(); openPaymentModal(b.dataset.pay); });
     }
+    $('#rQ').oninput = U.debounce(e => { repState.q = e.target.value; dues(); }, 150);
     $('#rGrade').onchange = e => { repState.grade = e.target.value; dues(); };
+    $('#rBiz').onchange = e => { repState.business = e.target.value; dues(); };
     $('#rHead').onchange = e => { repState.head = e.target.value; dues(); };
-    $('#expCat').onclick = () => { const rows = [['Category', 'Amount', 'Received', 'Receivable']]; cats.forEach(c => rows.push([c.label, c.total, c.paid, c.bal])); rows.push(['TOTAL', gt, gp, gt - gp]); U.download('akb_category_summary.csv', U.toCSV(rows), 'text/csv'); U.toast('Exported', 'success'); };
+    $('#rStatus').onchange = e => { repState.status = e.target.value; dues(); };
+    $('#rSort').onchange = e => { repState.sort = e.target.value; dues(); };
+    $('#expCat').onclick = () => { const rows = [['Category', 'Business', 'Amount', 'Received', 'Receivable']]; cats.forEach(c => rows.push([c.label, c.biz, c.total, c.paid, c.bal])); rows.push(['TOTAL', '', gt, gp, gt - gp]); U.download('akb_category_summary.csv', U.toCSV(rows), 'text/csv'); U.toast('Exported', 'success'); };
     $('#expDue').onclick = () => {
-      let rows = Store.students.map(s => ({ s, t: Store.studentTotals(s) })).filter(r => r.t.balance > 0);
-      if (repState.grade) rows = rows.filter(r => r.s.grade === repState.grade);
-      rows.sort((a, b) => b.t.balance - a.t.balance);
+      const rows = filtered();
       const out = [['Student ID', 'Name', 'Grade', 'Father', 'Contact', 'Total', 'Paid', 'Outstanding']];
-      rows.forEach(r => out.push([r.s.id, r.s.name, r.s.grade, r.s.father, r.s.contact, r.t.total, r.t.paid, r.t.balance]));
-      U.download('akb_defaulters.csv', U.toCSV(out), 'text/csv'); U.toast('Exported defaulters', 'success');
+      rows.forEach(r => out.push([r.s.id, r.s.name, r.s.grade, r.s.father, r.s.contact, r.t.total, r.t.paid, balOf(r)]));
+      U.download('akb_dues_filtered.csv', U.toCSV(out), 'text/csv'); U.toast('Exported ' + rows.length + ' rows', 'success');
     };
+    bindNav();
     dues();
   }
 
@@ -668,10 +794,19 @@
         <button class="btn sm" data-role="${U.esc(u.username)}">${u.role === 'admin' ? 'Make account' : 'Make admin'}</button>
         <button class="btn sm danger" data-del="${U.esc(u.username)}">Delete</button>
       </td></tr>`).join('');
+    const nAdmin = Store.users.filter(u => u.role === 'admin').length;
+    const nAcct = Store.users.filter(u => u.role === 'account').length;
+    const nDefault = Store.users.filter(u => u.mustChange).length;
     view().innerHTML = `
       <div class="page-head"><div><h1>Users &amp; Access</h1><p>Admins see everything; accounts can record payments and view students' pending fees</p></div>
         <button class="btn primary" id="addUser">＋ Add user</button></div>
-      <div class="panel"><div class="table-scroll"><table>
+      <div class="cards">
+        ${kpi('Total Users', Store.users.length, { accent: 'blue' })}
+        ${kpi('Admins', nAdmin, { accent: 'green' })}
+        ${kpi('Accounts', nAcct, { accent: 'amber' })}
+        ${kpi('Default Passwords', nDefault, { accent: nDefault ? 'red' : 'green', sub: nDefault ? 'change these!' : 'all changed' })}
+      </div>
+      <div class="panel"><div class="panel-head"><h2>User Accounts</h2></div><div class="table-scroll"><table>
         <thead><tr><th>User</th><th>Role</th><th class="t-right">Actions</th></tr></thead><tbody>${rows}</tbody></table></div></div>
       <div class="panel"><div class="panel-body pad">
         <p class="muted" style="margin:0"><b>Note on security:</b> this login runs in the browser, so it's an access convenience for staff on shared devices — not server‑grade protection. For a public deploy, also set the <code>APP_PASSWORD</code> environment variable (site‑wide gate) and, for true multi‑user security, use the backend option.</p>

@@ -59,8 +59,32 @@ Admins can add more users, change roles, and delete users on the **Users** page.
 | **Data & Backup** | Admin | Full JSON backup/restore, students CSV, reset to workbook data. |
 
 The 7 fee categories match the Chairman Dashboard: Terms Fees, School Supplies, App Fees Paid,
-Uniform & Accessories, Transport Fees, Extra Curricular Fees, Evening Sports — each mapped to its
-business owner (AKB School of Excellence / AKB & Co / Falcon Trading & Transport).
+Uniform & Accessories, Transport Fees, Extra Curricular Fees, Evening Sports.
+
+## Businesses & separate receipts
+
+Every fee head belongs to one of four businesses. When a payment covers heads from more than one
+business, the app generates a **separate, logo‑branded receipt per business** (each with its own
+receipt‑number series), and **Print** outputs all of them:
+
+| Business | Fee heads | Receipt prefix | Logo |
+|----------|-----------|----------------|------|
+| **AKB School of Excellence** | Terms Fees, App Fees, Extra Curricular | `AKB/…` | `assets/img/logo-school.svg` |
+| **AKB & Co** | School Supplies, Uniform & Accessories | `CO/…` | `assets/img/logo-co.svg` |
+| **Falcon Trading & Transport** | Transport Fees | `FTT/…` | `assets/img/logo-falcon.svg` |
+| **AKB Sports Academy** | Evening Sports | `SA/…` | `assets/img/logo-sports.svg` |
+
+KPI cards appear on every tab and are clickable (they jump to the related page); the Dashboard and
+Collections pages compile **business‑wise** totals; Reports has multi‑filters (search, grade,
+business, fee head, status, sort).
+
+### Replacing the logos with your exact artwork
+
+The four logos in `assets/img/` are clean on‑brand SVGs. To use your **exact** logo files, drop your
+images in `assets/img/` and point each business to them by editing the `logo:` paths in the
+`BUSINESSES` object at the top of `assets/js/store.js` (PNG/JPG/SVG all work), e.g.
+`logo: 'assets/img/my-school-logo.png'`. The head→business mapping (`HEAD_BUSINESS`) is right below
+it if you ever need to move a fee head to a different business.
 
 ## How payments work
 

@@ -44,8 +44,8 @@
         case 'students': setActive('students'); Views.students(params); break;
         case 'student': setActive('students'); Views.studentDetail(decodeURIComponent(seg[1] || '')); break;
         case 'collect': setActive('collect'); Views.collect(); break;
-        case 'collections': setActive('collections'); Views.collections(); break;
-        case 'reports': setActive('reports'); Views.reports(); break;
+        case 'collections': setActive('collections'); Views.collections(params); break;
+        case 'reports': setActive('reports'); Views.reports(params); break;
         case 'users': setActive('users'); Views.users(); break;
         case 'data': setActive('data'); Views.data(); break;
         default: location.hash = Store.isAdmin() ? '#/dashboard' : '#/students';

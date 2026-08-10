@@ -212,5 +212,12 @@ h4.sec:first-child{margin-top:0}
   .modal-backdrop{position:static;background:none;padding:0;display:block}
   .modal{box-shadow:none;max-width:none}
   .modal-head,.modal-foot{display:none!important}
-  .receipt{box-shadow:none!important;border:none!important}
+  .receipt{box-shadow:none!important;border:none!important;page-break-after:always}
+  .receipt:last-child{page-break-after:auto}
 }
+
+/* KPI cards are clickable */
+.card.link{cursor:pointer;transition:transform .1s,box-shadow .1s}
+.card.link:hover{transform:translateY(-2px);box-shadow:var(--shadow-lg)}
+.biz-logo{height:26px;width:auto;vertical-align:middle;margin-right:8px}
+.biz-head{display:flex;align-items:center;gap:8px}

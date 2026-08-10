@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" role="img" aria-label="AKB Sports Academy">
+  <defs>
+    <linearGradient id="spg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#7c1d2e"/><stop offset="1" stop-color="#4a0f1c"/></linearGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f7e08a"/><stop offset=".5" stop-color="#d4af37"/><stop offset="1" stop-color="#a9812a"/></linearGradient>
+  </defs>
+  <!-- laurel hint -->
+  <path d="M18 60c8 20 22 30 42 34" fill="none" stroke="url(#gold)" stroke-width="2.5" opacity=".8"/>
+  <path d="M102 60c-8 20-22 30-42 34" fill="none" stroke="url(#gold)" stroke-width="2.5" opacity=".8"/>
+  <!-- shield -->
+  <path d="M32 26h56v34c0 20-16 32-28 38-12-6-28-18-28-38z" fill="url(#gold)"/>
+  <path d="M35 29h50v31c0 18-14 29-25 34-11-5-25-16-25-34z" fill="url(#spg)" stroke="url(#gold)" stroke-width="1.5"/>
+  <path d="M60 22l2 5 5 .3-4 3.2 1.4 5-4.4-2.9-4.4 2.9 1.4-5-4-3.2 5-.3z" fill="url(#gold)"/>
+  <text x="60" y="58" text-anchor="middle" font-family="Georgia,serif" font-weight="800" font-size="20" fill="url(#gold)">AKB</text>
+  <text x="60" y="72" text-anchor="middle" font-family="Arial,sans-serif" font-weight="700" font-size="8" fill="#fff" letter-spacing="1">SPORTS</text>
+  <text x="60" y="82" text-anchor="middle" font-family="Arial,sans-serif" font-weight="700" font-size="7" fill="#fff" letter-spacing="1">ACADEMY</text>
+  <circle cx="60" cy="92" r="3.4" fill="#fff" stroke="#333" stroke-width=".6"/><path d="M60 88.6l2.2 1.6-.8 2.6h-2.8l-.8-2.6z" fill="#111"/>
+</svg>
