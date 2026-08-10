@@ -354,6 +354,7 @@
         </div>
         <div class="flex gap">
           <button class="btn" id="editBtn">✏️ Edit</button>
+          <button class="btn danger" id="delStudentBtn">🗑 Delete</button>
           <button class="btn green" id="payBtn">🧾 Receive Payment</button>
         </div>
       </div>
@@ -505,6 +506,11 @@
   function bindStudentActions(s) {
     $('#payBtn').onclick = () => openPaymentModal(s.id);
     $('#editBtn').onclick = () => openEditModal(s.id);
+    const del = document.getElementById('delStudentBtn');
+    if (del) del.onclick = () => {
+      if (!confirm('Delete student "' + s.name + '" (ID ' + s.id + ')?\n\nThis removes the student record. Their past receipts stay in Collections.')) return;
+      Store.deleteStudent(s.id).then(() => { U.toast('Student deleted', 'success'); location.hash = '#/students'; });
+    };
     $$('[data-print]').forEach(b => b.onclick = () => { const p = Store.payments.find(x => x.id === b.dataset.print); if (p) Receipt.open(p); });
     $$('[data-del]').forEach(b => b.onclick = async () => {
       if (!confirm('Delete this payment? The amount will be added back to the balance.')) return;

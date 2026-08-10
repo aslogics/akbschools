@@ -285,6 +285,22 @@
       if (useIDB) await idbPut('students', s);
       else LS.setItem('akb_students', JSON.stringify(this.students));
     },
+    // Delete a student record. Past receipts are kept (they carry the student's
+    // name/grade) unless withPayments is true.
+    async deleteStudent(id, withPayments) {
+      const i = this.students.findIndex(s => s.id === id);
+      if (i < 0) return;
+      this.students.splice(i, 1);
+      if (useIDB) await idbDelete('students', id);
+      else LS.setItem('akb_students', JSON.stringify(this.students));
+      if (withPayments) {
+        const keep = this.payments.filter(p => p.studentId !== id);
+        const removed = this.payments.filter(p => p.studentId === id);
+        this.payments = keep;
+        if (useIDB) { for (const r of removed) await idbDelete('payments', r.id); }
+        else LS.setItem('akb_payments', JSON.stringify(this.payments));
+      }
+    },
 
     /* ---- users & auth (client-side gate) ---- */
     async seedUsers() {
