@@ -36,7 +36,7 @@
       return { bk, B: Store.BUSINESSES[bk], total, paid, bal: total - paid };
     });
     const bizCards = bizSum.map(b => `
-      <div class="card link" data-nav="#/reports?business=${b.bk}" style="border-left:4px solid ${b.B.color}">
+      <div class="card link" data-nav="#/business/${b.bk}" style="border-left:4px solid ${b.B.color}">
         <div class="biz-head"><img class="biz-logo" src="${b.B.logo}" alt=""/><div class="k" style="margin:0">${U.esc(b.B.name)}</div></div>
         <div class="v" style="font-size:20px">${U.inr(b.paid)}</div>
         <div class="sub">of ${U.inr(b.total)} · <span style="color:${b.bal > 0 ? 'var(--red)' : 'var(--green)'}">${U.inr(b.bal)} due</span></div>
@@ -693,7 +693,7 @@
 
       <div class="panel"><div class="panel-head"><h2>Business-wise Summary</h2></div>
         <div class="table-scroll"><table><thead><tr><th>Business</th><th class="t-right">Billed</th><th class="t-right">Collected</th><th class="t-right">Outstanding</th><th class="t-right">%</th></tr></thead>
-        <tbody>${bizSum.map(b => `<tr class="clickable" data-nav="#/reports?business=${b.bk}"><td><span class="biz-head"><img class="biz-logo" src="${b.B.logo}" alt=""/>${U.esc(b.B.name)}</span></td>
+        <tbody>${bizSum.map(b => `<tr class="clickable" data-nav="#/business/${b.bk}"><td><span class="biz-head"><img class="biz-logo" src="${b.B.logo}" alt=""/>${U.esc(b.B.name)}</span></td>
           <td class="num">${U.inr(b.total)}</td><td class="num" style="color:var(--green)">${U.inr(b.paid)}</td>
           <td class="num" style="color:${b.total - b.paid > 0 ? 'var(--red)' : 'var(--muted)'}">${U.inr(b.total - b.paid)}</td>
           <td class="num">${b.total ? Math.round(b.paid / b.total * 100) : 0}%</td></tr>`).join('')}</tbody></table></div></div>
@@ -782,6 +782,102 @@
     };
     bindNav();
     dues();
+  }
+
+  /* -------------------------------------------------- Business dashboard (admin) */
+  let bizState = { q: '', grade: '', head: '', sort: 'balance' };
+  function businessDashboard(key) {
+    const B = Store.BUSINESSES[key];
+    if (!B) { view().innerHTML = `<div class="empty">Unknown business. <a href="#/dashboard">Back to dashboard</a></div>`; return; }
+    const heads = Store.HEAD_ORDER.filter(k => Store.businessOfHead(k) === key);
+    // aggregate totals for this business
+    let total = 0, paid = 0;
+    const headAgg = heads.map(k => {
+      let t = 0, p = 0; Store.students.forEach(s => { const h = s.fees[k]; if (h) { t += h.total; p += h.paid; } });
+      total += t; paid += p; return { k, label: Store.HEAD_LABELS[k], t, p, bal: t - p };
+    });
+    const outstanding = total - paid;
+    const bizBal = s => heads.reduce((a, k) => a + ((s.fees[k] || {}).balance || 0), 0);
+    const bizPaid = s => heads.reduce((a, k) => a + ((s.fees[k] || {}).paid || 0), 0);
+    const bizTotal = s => heads.reduce((a, k) => a + ((s.fees[k] || {}).total || 0), 0);
+    const pendingCount = Store.students.filter(s => bizBal(s) > 0).length;
+    const grades = Array.from(new Set(Store.students.map(s => s.grade).filter(Boolean))).sort();
+
+    // collected in-app for this business
+    const appCollected = Store.payments.filter(p => (p.business || 'school') === key).reduce((a, p) => a + p.amount, 0);
+
+    view().innerHTML = `
+      <div class="page-head">
+        <div class="flex gap" style="align-items:center">
+          <a href="#/dashboard" class="btn ghost sm">← Back</a>
+          <div class="biz-head"><span class="brand-logo" style="width:46px;height:46px;box-shadow:var(--shadow)"><img src="${B.logo}" alt=""/></span>
+            <div><h1 style="margin:0">${U.esc(B.name)}</h1><p>${U.esc(B.sub)} · pending students</p></div>
+          </div>
+        </div>
+        <button class="btn" id="bizExp">⬇ Export CSV</button>
+      </div>
+
+      <div class="cards">
+        ${kpi('Billed', U.inr(total), { accent: 'blue' })}
+        ${kpi('Collected', U.inr(paid), { accent: 'green', sub: (total ? Math.round(paid / total * 100) : 0) + '% collected' })}
+        ${kpi('Outstanding', U.inr(outstanding), { accent: 'red' })}
+        ${kpi('Pending Students', pendingCount, { accent: 'amber' })}
+      </div>
+
+      <div class="panel"><div class="panel-head"><h2>Fee Heads — ${U.esc(B.name)}</h2></div>
+        <div class="table-scroll"><table><thead><tr><th>Fee Head</th><th class="t-right">Billed</th><th class="t-right">Collected</th><th class="t-right">Outstanding</th></tr></thead>
+        <tbody>${headAgg.map(h => `<tr><td><b>${U.esc(h.label)}</b></td><td class="num">${U.inr(h.t)}</td><td class="num" style="color:var(--green)">${U.inr(h.p)}</td><td class="num" style="color:${h.bal > 0 ? 'var(--red)' : 'var(--muted)'}">${U.inr(h.bal)}</td></tr>`).join('')}</tbody>
+        <tfoot><tr style="font-weight:700;background:#f8fafc"><td>TOTAL</td><td class="num">${U.inr(total)}</td><td class="num" style="color:var(--green)">${U.inr(paid)}</td><td class="num" style="color:var(--red)">${U.inr(outstanding)}</td></tr></tfoot></table></div></div>
+
+      <div class="panel">
+        <div class="panel-head"><h2>Students with Pending ${U.esc(B.name)} Fees</h2>
+          <div class="toolbar">
+            <input id="bizQ" type="search" placeholder="name / ID / phone" value="${U.esc(bizState.q)}" style="min-width:150px"/>
+            <select id="bizGrade"><option value="">All grades</option>${grades.map(g => `<option${bizState.grade === g ? ' selected' : ''}>${U.esc(g)}</option>`).join('')}</select>
+            ${heads.length > 1 ? `<select id="bizHead"><option value="">All ${U.esc(B.name)} heads</option>${heads.map(k => `<option value="${k}"${bizState.head === k ? ' selected' : ''}>${U.esc(Store.HEAD_LABELS[k])}</option>`).join('')}</select>` : ''}
+            <select id="bizSort"><option value="balance"${bizState.sort === 'balance' ? ' selected' : ''}>Sort: Pending ↓</option><option value="name"${bizState.sort === 'name' ? ' selected' : ''}>Sort: Name</option><option value="grade"${bizState.sort === 'grade' ? ' selected' : ''}>Sort: Grade</option></select>
+          </div></div>
+        <div class="table-scroll"><table>
+          <thead><tr><th>Student</th><th>Grade</th><th>Contact</th>${heads.map(k => `<th class="t-right">${U.esc(Store.HEAD_LABELS[k])}</th>`).join('')}<th class="t-right">Pending</th><th></th></tr></thead>
+          <tbody id="bizBody"></tbody></table></div>
+        <div class="panel-body pad" id="bizFoot"></div>
+      </div>`;
+
+    function pendingHeadBal(s, k) { return (s.fees[k] || {}).balance || 0; }
+    function filtered() {
+      const q = bizState.q.trim().toLowerCase();
+      let rows = Store.students.map(s => ({ s, bal: bizState.head ? pendingHeadBal(s, bizState.head) : bizBal(s) }));
+      rows = rows.filter(r => r.bal > 0);
+      if (bizState.grade) rows = rows.filter(r => r.s.grade === bizState.grade);
+      if (q) rows = rows.filter(r => (r.s.name + ' ' + r.s.id + ' ' + (r.s.contact || '')).toLowerCase().indexOf(q) >= 0);
+      rows.sort((a, b) => bizState.sort === 'name' ? a.s.name.localeCompare(b.s.name) : (bizState.sort === 'grade' ? (a.s.grade || '').localeCompare(b.s.grade || '') : b.bal - a.bal));
+      return rows;
+    }
+    function draw() {
+      const rows = filtered();
+      $('#bizBody').innerHTML = rows.slice(0, 1000).map(r => `<tr class="clickable" data-id="${U.esc(r.s.id)}">
+        <td><b>${U.esc(r.s.name)}</b><div class="muted" style="font-size:11px">ID ${U.esc(r.s.id)} · ${U.esc(r.s.father || '')}</div></td>
+        <td>${U.esc(r.s.grade || '')}</td><td class="mono">${U.esc(r.s.contact || '')}</td>
+        ${heads.map(k => { const b = pendingHeadBal(r.s, k); return `<td class="num" style="color:${b > 0 ? 'var(--red)' : 'var(--muted)'}">${U.inr(b)}</td>`; }).join('')}
+        <td class="num" style="color:var(--red);font-weight:700">${U.inr(r.bal)}</td>
+        <td class="t-right"><button class="btn green sm" data-pay="${U.esc(r.s.id)}">Collect</button></td></tr>`).join('')
+        || `<tr><td colspan="${4 + heads.length}" class="empty">No students pending for ${U.esc(B.name)} 🎉</td></tr>`;
+      const sum = rows.reduce((a, r) => a + r.bal, 0);
+      $('#bizFoot').innerHTML = `<b>${rows.length}</b> pending students · Outstanding <b style="color:var(--red)">${U.inr(sum)}</b>`;
+      $$('#bizBody [data-id]').forEach(tr => tr.onclick = e => { if (e.target.dataset.pay) return; location.hash = '#/student/' + encodeURIComponent(tr.dataset.id); });
+      $$('#bizBody [data-pay]').forEach(b => b.onclick = ev => { ev.stopPropagation(); openPaymentModal(b.dataset.pay); });
+    }
+    $('#bizQ').oninput = U.debounce(e => { bizState.q = e.target.value; draw(); }, 150);
+    $('#bizGrade').onchange = e => { bizState.grade = e.target.value; draw(); };
+    if ($('#bizHead')) $('#bizHead').onchange = e => { bizState.head = e.target.value; draw(); };
+    $('#bizSort').onchange = e => { bizState.sort = e.target.value; draw(); };
+    $('#bizExp').onclick = () => {
+      const rows = filtered();
+      const out = [['Student ID', 'Name', 'Grade', 'Father', 'Contact'].concat(heads.map(k => Store.HEAD_LABELS[k] + ' Pending')).concat(['Total Pending'])];
+      rows.forEach(r => out.push([r.s.id, r.s.name, r.s.grade, r.s.father, r.s.contact].concat(heads.map(k => pendingHeadBal(r.s, k))).concat([r.bal])));
+      U.download('akb_' + key + '_pending.csv', U.toCSV(out), 'text/csv'); U.toast('Exported ' + rows.length + ' rows', 'success');
+    };
+    draw();
   }
 
   /* -------------------------------------------------- Users (admin) */
@@ -928,5 +1024,5 @@
     $('#resetBtn').onclick = async () => { if (!confirm('This will DELETE all payments recorded in the app and reload original balances. Continue?')) return; await Store.resetToSeed(); U.toast('Reset complete', 'success'); Router.render(); };
   }
 
-  w.Views = { dashboard, students, studentDetail, collect, collections, reports, users, data, openPaymentModal, changePassword };
+  w.Views = { dashboard, students, studentDetail, businessDashboard, collect, collections, reports, users, data, openPaymentModal, changePassword };
 })(window);
