@@ -2,8 +2,13 @@
 (function (w) {
   'use strict';
 
+  // routes allowed for the "account" role. Accounts share the full admin
+  // dashboard/collections/reports; only Users and Data & Backup stay admin-only.
+  const ACCOUNT_ROUTES = { dashboard: 1, students: 1, student: 1, collect: 1, business: 1, collections: 1, reports: 1 };
+
   const Router = {
     render() { route(); },
+    start: startApp
   };
   w.Router = Router;
 
@@ -18,22 +23,32 @@
   }
 
   function setActive(routeName) {
-    document.querySelectorAll('#nav a').forEach(a => {
-      a.classList.toggle('active', a.dataset.route === routeName);
-    });
+    document.querySelectorAll('#nav a').forEach(a => a.classList.toggle('active', a.dataset.route === routeName));
+  }
+
+  function allowed(name) {
+    if (Store.isAdmin()) return true;
+    return !!ACCOUNT_ROUTES[name];
   }
 
   function route() {
     const { seg, params } = parseHash();
-    const name = seg[0];
+    let name = seg[0];
+    if (!allowed(name)) {
+      // send accounts to their landing page (dashboard)
+      name = 'dashboard';
+      if (location.hash.replace(/^#\/?/, '').split('/')[0] !== 'dashboard') { location.hash = '#/dashboard'; return; }
+    }
     try {
       switch (name) {
         case 'dashboard': setActive('dashboard'); Views.dashboard(); break;
         case 'students': setActive('students'); Views.students(params); break;
         case 'student': setActive('students'); Views.studentDetail(decodeURIComponent(seg[1] || '')); break;
+        case 'business': setActive('dashboard'); Views.businessDashboard(decodeURIComponent(seg[1] || '')); break;
         case 'collect': setActive('collect'); Views.collect(); break;
-        case 'collections': setActive('collections'); Views.collections(); break;
-        case 'reports': setActive('reports'); Views.reports(); break;
+        case 'collections': setActive('collections'); Views.collections(params); break;
+        case 'reports': setActive('reports'); Views.reports(params); break;
+        case 'users': setActive('users'); Views.users(); break;
         case 'data': setActive('data'); Views.data(); break;
         default: location.hash = '#/dashboard';
       }
@@ -41,12 +56,27 @@
       console.error(e);
       document.getElementById('view').innerHTML = '<div class="empty">Something went wrong: ' + U.esc(e.message) + '</div>';
     }
-    // close mobile sidebar on navigate
     document.getElementById('sidebar').classList.remove('open');
     window.scrollTo(0, 0);
   }
 
-  /* global search */
+  function applyRoleUI() {
+    const admin = Store.isAdmin();
+    document.querySelectorAll('#nav a[data-admin]').forEach(a => a.classList.toggle('hidden', !admin));
+    const u = Store.currentUser || {};
+    document.getElementById('userBox').innerHTML = `
+      <div class="user-row">
+        <div class="user-ava">${U.esc(U.initials(u.name || u.username || '?'))}</div>
+        <div class="user-meta"><strong>${U.esc(u.name || u.username)}</strong><span class="badge ${admin ? 'blue' : 'gray'}">${U.esc(u.role)}</span></div>
+      </div>
+      <div class="user-actions">
+        <button class="btn sm" id="changePw">Password</button>
+        <button class="btn sm" id="logoutBtn">Logout</button>
+      </div>`;
+    document.getElementById('logoutBtn').onclick = () => Auth.logout();
+    document.getElementById('changePw').onclick = () => Views.changePassword();
+  }
+
   function wireGlobalSearch() {
     const input = document.getElementById('globalSearch');
     const box = document.getElementById('searchResults');
@@ -68,30 +98,36 @@
         box.classList.remove('open'); input.value = '';
       });
     }, 150);
-    input.oninput = run;
-    input.onfocus = run;
-    document.addEventListener('click', e => {
-      if (!e.target.closest('.search-wrap')) box.classList.remove('open');
-    });
+    input.oninput = run; input.onfocus = run;
+    document.addEventListener('click', e => { if (!e.target.closest('.search-wrap')) box.classList.remove('open'); });
+  }
+
+  let wired = false;
+  function startApp() {
+    applyRoleUI();
+    if (!wired) {
+      wireGlobalSearch();
+      window.addEventListener('hashchange', route);
+      document.getElementById('hamburger').onclick = () => document.getElementById('sidebar').classList.toggle('open');
+      wired = true;
+    }
+    document.getElementById('yearBadge').textContent = (Store.meta.school || 'AKB School') + ' · ' + (Store.meta.year || '');
+    // both roles land on the dashboard
+    if (!location.hash || location.hash === '#/' ) location.hash = '#/dashboard';
+    route();
   }
 
   async function boot() {
-    document.getElementById('hamburger').onclick = () =>
-      document.getElementById('sidebar').classList.toggle('open');
-    window.addEventListener('hashchange', route);
-
     try {
       await Store.init();
-      document.getElementById('dbStatus').title = 'Data loaded';
-      document.getElementById('yearBadge').textContent =
-        (Store.meta.school || 'AKB School') + ' · ' + (Store.meta.year || '');
-      wireGlobalSearch();
-      route();
+      const u = Store.restoreSession();
+      if (u) startApp(u);
+      else Auth.showLogin(startApp);
     } catch (e) {
       console.error(e);
       document.getElementById('view').innerHTML =
         '<div class="empty">Failed to load data: ' + U.esc(e.message) +
-        '<br><br>If you opened this file directly, try running a local server:<br><code>python3 -m http.server</code> then open <code>http://localhost:8000</code></div>';
+        '<br><br>If you opened this file directly, try a local server:<br><code>python3 -m http.server</code> then open <code>http://localhost:8000</code></div>';
     }
   }
 
