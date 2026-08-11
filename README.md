@@ -145,6 +145,38 @@ open to anyone with the URL.
 > This Basic‑Auth gate is a simple guard for a small deployment, not a full user‑management
 > system. For multiple staff accounts / roles, we'd add a proper backend + login.
 
+## Shared server data + weekly Excel email backup
+
+When the app runs on the Node server (`server.js`), all devices share **one dataset**
+(stored server-side) and a **formatted Excel backup** can be emailed automatically every week.
+Opened as a static file (or if the server is unreachable), the app falls back to per-browser
+storage automatically.
+
+**Persist the data — mount a volume:** in Railway, add a **Volume** mounted at **`/data`** (or set
+`DATA_DIR` to the mount path). The shared state lives in `<DATA_DIR>/state.json`. Without a volume,
+Railway's filesystem is ephemeral and data is lost on redeploy.
+
+**Migrating existing browser data:** the first browser to open the server version, when the server
+is still empty, **uploads its saved data to the server**. So open the deployed app first on the
+device that has your latest data. (Alternatively: Data & Backup → Download Full Backup on the old
+site, then Restore from Backup on the new one.)
+
+**Weekly email backup** — set these Railway env vars (SMTP; Gmail app-password or any provider):
+
+| Variable | Meaning |
+|----------|---------|
+| `SMTP_HOST`, `SMTP_PORT` | SMTP server (e.g. `smtp.gmail.com`, `587`) |
+| `SMTP_SECURE` | `true` for port 465, else `false` |
+| `SMTP_USER`, `SMTP_PASS` | SMTP login (Gmail: an **app password**) |
+| `MAIL_FROM` | From address (defaults to `SMTP_USER`) |
+| `BACKUP_EMAIL` | recipient (default `contact@akbschools.com`) |
+| `BACKUP_DAY` | 0–6, 1 = Monday (default 1) |
+| `BACKUP_HOUR` | 0–23, server local time (default 6) |
+
+The server generates a multi-sheet workbook (Dashboard, Students, Payments) and emails it weekly.
+Admins can also **Data & Backup → Download Excel** or **Email backup now**. Endpoints:
+`GET /api/backup.xlsx`, `POST /api/send-backup`, `GET /api/backup-status`, `GET|PUT /api/state`.
+
 ## WhatsApp bulk fee reminders (optional, server-side)
 
 The app can send fee‑balance reminders in bulk from the school's WhatsApp Business

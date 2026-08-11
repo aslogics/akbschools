@@ -82,6 +82,8 @@
 
   let db = null;
   let useIDB = true;
+  // server-shared-state mode (set at init if /api/state is reachable)
+  let serverMode = false, baseVersion = 0, syncTimer = null, syncing = false, syncAgain = false;
 
   const Store = {
     students: [],   // in-memory cache
@@ -93,32 +95,91 @@
     ENTITIES, MODES, HEAD_ORDER, HEAD_LABELS, BUSINESS, BUSINESSES, BUSINESS_ORDER, HEAD_BUSINESS,
     SCHOOL_WHATSAPP, SCHOOL_WHATSAPP_DISPLAY, DEFAULT_FEE_HEADS,
 
+    serverMode() { return serverMode; },
+
     async init() {
+      // Prefer shared server state (all devices see one dataset)
       try {
-        db = await openDB();
-      } catch (e) {
-        console.warn('IndexedDB unavailable, using localStorage', e);
-        useIDB = false;
+        const r = await fetch('api/state', { cache: 'no-store' });
+        if (r.ok) { serverMode = true; this._applyServer(await r.json()); }
+      } catch (e) { serverMode = false; }
+
+      if (!serverMode) {
+        try { db = await openDB(); } catch (e) { console.warn('IndexedDB unavailable, using localStorage', e); useIDB = false; }
+        await this.load();
+      } else if (!this.students.length) {
+        // Server is empty on first connect — migrate this browser's saved data (if any)
+        try {
+          if (!db) { try { db = await openDB(); } catch (e) { db = null; } }
+          if (db) {
+            const local = await idbAll('students');
+            if (local && local.length) {
+              this.students = local;
+              this.payments = (await idbAll('payments')) || [];
+              this.users = (await idbAll('users')) || [];
+              const mr = await idbAll('meta'); this.meta = (mr[0] && mr[0].value) || this.meta;
+              U.toast('Uploading this device’s saved data to the server…', 'success');
+            }
+          }
+        } catch (e) {}
       }
-      await this.load();
-      if (!this.meta.seeded) {
-        await this.seed();
-      }
-      if (!this.users.length) {
-        await this.seedUsers();
-      }
-      // fee-head config (admin-editable); default on first run
+
+      // seed only when truly empty (never clobber existing server data)
+      if (!this.meta.seeded && !this.students.length) await this.seed();
+      else if (!this.meta.seeded) this.meta.seeded = true;
+      if (!this.users.length) await this.seedUsers();
+
       if (!Array.isArray(this.meta.feeHeads) || !this.meta.feeHeads.length) {
         this.meta.feeHeads = DEFAULT_FEE_HEADS.map(h => Object.assign({}, h));
       }
       this.feeHeads = this.meta.feeHeads;
       rebuildHeads(this.feeHeads);
-      const changed = this.migrateLegacyHeads() | this.ensureStudentHeads();
-      await this.persistMeta();
-      if (changed) await this.persistStudents();
-      // derive computed totals once
+      this.migrateLegacyHeads(); this.ensureStudentHeads();
+      await this.persist(); // pushes seed/migration to server (or writes locally)
       this.recomputeAll();
       return this;
+    },
+
+    /* ---- persistence (server if available, else IndexedDB/localStorage) ---- */
+    _snapshot() { return { students: this.students, payments: this.payments, users: this.users, meta: this.meta }; },
+    _applyServer(dbObj) {
+      baseVersion = (dbObj && dbObj.version) || 0;
+      const st = (dbObj && dbObj.state) || {};
+      this.students = st.students || [];
+      this.payments = st.payments || [];
+      this.users = st.users || [];
+      this.meta = st.meta || {};
+      if (Array.isArray(this.meta.feeHeads) && this.meta.feeHeads.length) { this.feeHeads = this.meta.feeHeads; rebuildHeads(this.feeHeads); }
+      this.recomputeAll();
+    },
+    async persist() {
+      if (serverMode) { this._scheduleSync(); return; }
+      if (useIDB) {
+        await idbClear('students'); await idbPutMany('students', this.students);
+        await idbClear('payments'); await idbPutMany('payments', this.payments);
+        await idbClear('users'); await idbPutMany('users', this.users);
+        await idbPut('meta', { id: 'meta', value: this.meta });
+      } else {
+        LS.setItem('akb_students', JSON.stringify(this.students));
+        LS.setItem('akb_payments', JSON.stringify(this.payments));
+        LS.setItem('akb_users', JSON.stringify(this.users));
+        LS.setItem('akb_meta', JSON.stringify(this.meta));
+      }
+    },
+    _scheduleSync() { clearTimeout(syncTimer); syncTimer = setTimeout(() => this._syncNow(), 350); },
+    async _syncNow() {
+      if (syncing) { syncAgain = true; return; }
+      syncing = true;
+      try {
+        const r = await fetch('api/state', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ baseVersion, state: this._snapshot() }) });
+        if (r.status === 409) {
+          this._applyServer(await r.json());
+          U.toast('Reloaded latest data (another device was editing)', 'error');
+          if (w.Router && w.Router.render) w.Router.render();
+        } else if (r.ok) { baseVersion = (await r.json()).version; }
+      } catch (e) { /* offline — will retry on next change */ }
+      syncing = false;
+      if (syncAgain) { syncAgain = false; this._scheduleSync(); }
     },
 
     async load() {
@@ -153,15 +214,12 @@
     },
 
     async resetToSeed() {
-      if (useIDB) {
-        await idbClear('students'); await idbClear('payments'); await idbClear('meta');
-      } else {
-        LS.removeItem('akb_students');
-        LS.removeItem('akb_payments');
-        LS.removeItem('akb_meta');
-      }
       this.meta = {};
       await this.seed();
+      this.meta.feeHeads = DEFAULT_FEE_HEADS.map(h => Object.assign({}, h));
+      this.feeHeads = this.meta.feeHeads; rebuildHeads(this.feeHeads);
+      this.ensureStudentHeads();
+      await this.persist();
       this.recomputeAll();
     },
 
@@ -185,21 +243,9 @@
     },
     recomputeAll() { this.students.forEach(s => this.recompute(s)); },
 
-    async persistStudents() {
-      if (useIDB) {
-        await idbPutMany('students', this.students);
-      } else {
-        LS.setItem('akb_students', JSON.stringify(this.students));
-      }
-    },
-    async persistStudent(s) {
-      if (useIDB) await idbPut('students', s);
-      else LS.setItem('akb_students', JSON.stringify(this.students));
-    },
-    async persistMeta() {
-      if (useIDB) await idbPut('meta', { id: 'meta', value: this.meta });
-      else LS.setItem('akb_meta', JSON.stringify(this.meta));
-    },
+    async persistStudents() { return this.persist(); },
+    async persistStudent(s) { return this.persist(); },
+    async persistMeta() { return this.persist(); },
 
     /* ---- payments ----
        A single collection is SPLIT by business, producing one receipt (and one
@@ -248,9 +294,7 @@
       // keep a running overall receipt count for stats
       this.meta.receiptSeq = (this.meta.receiptSeq || 0) + records.length;
 
-      if (useIDB) { for (const r of records) await idbPut('payments', r); await idbPut('students', student); }
-      else { LS.setItem('akb_payments', JSON.stringify(this.payments)); LS.setItem('akb_students', JSON.stringify(this.students)); }
-      await this.persistMeta();
+      await this.persist();
       return records; // array — one per business
     },
     businessOfHead(k) { return HEAD_BUSINESS[k] || 'school'; },
@@ -266,11 +310,9 @@
           if (h) h.paid = Math.max(0, (Number(h.paid) || 0) - (Number(it.amount) || 0));
         });
         this.recompute(student);
-        if (useIDB) await idbPut('students', student);
       }
       this.payments.splice(idx, 1);
-      if (useIDB) await idbDelete('payments', id);
-      else { LS.setItem('akb_payments', JSON.stringify(this.payments)); LS.setItem('akb_students', JSON.stringify(this.students)); }
+      await this.persist();
     },
 
     studentPayments(id) {
@@ -397,15 +439,8 @@
       const i = this.students.findIndex(s => s.id === id);
       if (i < 0) return;
       this.students.splice(i, 1);
-      if (useIDB) await idbDelete('students', id);
-      else LS.setItem('akb_students', JSON.stringify(this.students));
-      if (withPayments) {
-        const keep = this.payments.filter(p => p.studentId !== id);
-        const removed = this.payments.filter(p => p.studentId === id);
-        this.payments = keep;
-        if (useIDB) { for (const r of removed) await idbDelete('payments', r.id); }
-        else LS.setItem('akb_payments', JSON.stringify(this.payments));
-      }
+      if (withPayments) this.payments = this.payments.filter(p => p.studentId !== id);
+      await this.persist();
     },
 
     /* ---- users & auth (client-side gate) ---- */
@@ -463,13 +498,9 @@
       const target = this.getUser(username);
       if (target && target.role === 'admin' && admins.length <= 1) throw new Error('Cannot delete the last admin');
       this.users = this.users.filter(u => u.username !== username);
-      if (useIDB) await idbDelete('users', username);
-      else LS.setItem('akb_users', JSON.stringify(this.users));
+      await this.persist();
     },
-    async persistUsers() {
-      if (useIDB) { await idbClear('users'); await idbPutMany('users', this.users); }
-      else LS.setItem('akb_users', JSON.stringify(this.users));
-    },
+    async persistUsers() { return this.persist(); },
     // session (persisted so a refresh keeps you logged in on this device)
     setSession(u) {
       this.currentUser = u ? { username: u.username, role: u.role, name: u.name } : null;
@@ -501,24 +532,12 @@
       this.meta = obj.meta || { seeded: true, receiptSeq: 0 };
       this.meta.seeded = true;
       if (Array.isArray(obj.users) && obj.users.length) this.users = obj.users;
-      if (useIDB) {
-        await idbClear('students'); await idbClear('payments'); await idbClear('meta');
-        await idbPutMany('students', this.students);
-        await idbPutMany('payments', this.payments);
-        await idbPut('meta', { id: 'meta', value: this.meta });
-        if (Array.isArray(obj.users) && obj.users.length) { await idbClear('users'); await idbPutMany('users', this.users); }
-      } else {
-        LS.setItem('akb_students', JSON.stringify(this.students));
-        LS.setItem('akb_payments', JSON.stringify(this.payments));
-        LS.setItem('akb_meta', JSON.stringify(this.meta));
-        if (Array.isArray(obj.users) && obj.users.length) LS.setItem('akb_users', JSON.stringify(this.users));
-      }
       // re-apply fee-head config from the restored data (or defaults) and reconcile students
       if (!Array.isArray(this.meta.feeHeads) || !this.meta.feeHeads.length) this.meta.feeHeads = DEFAULT_FEE_HEADS.map(h => Object.assign({}, h));
       this.feeHeads = this.meta.feeHeads;
       rebuildHeads(this.feeHeads);
       this.migrateLegacyHeads(); this.ensureStudentHeads();
-      await this.persistStudents(); await this.persistMeta();
+      await this.persist();
       this.recomputeAll();
     }
   };
