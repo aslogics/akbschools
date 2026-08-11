@@ -244,11 +244,13 @@
 
   /* -------------------------------------------------- Bulk import (CSV) */
   // Import column headers (also used for the downloadable template)
-  const IMPORT_COLS = ['Student ID', 'Name', 'Grade', 'Class Teacher', 'Gender', 'Date of Birth',
-    'Father Name', 'Mother Name', 'Contact Number', 'Location', 'Transport', 'Bus/Driver',
-    'Religion', 'Discount %', 'Admission', 'Sports Activity', 'Previous School',
-    'Terms Fees', 'School Supplies', 'App Fees Paid', 'Uniform & Accessories',
-    'Transport Fees', 'Extra Curricular Fees', 'Evening Sports'];
+  // base columns + the current (dynamic) fee-category labels
+  function importCols() {
+    return ['Student ID', 'Name', 'Grade', 'Class Teacher', 'Gender', 'Date of Birth',
+      'Father Name', 'Mother Name', 'Contact Number', 'Location', 'Transport', 'Bus/Driver',
+      'Religion', 'Discount %', 'Admission', 'Sports Activity', 'Previous School']
+      .concat(Store.HEAD_ORDER.map(k => Store.HEAD_LABELS[k]));
+  }
   function headerToKey(h) {
     const n = String(h).trim().toLowerCase().replace(/\s+/g, ' ');
     const map = {
@@ -277,7 +279,7 @@
             <li>In Excel/Google Sheets, save your list as <b>CSV</b> (File → Save As / Download → CSV).</li>
             <li>Use these column headers (order doesn't matter; extra columns are ignored):</li>
           </ol>
-          <div class="table-scroll" style="max-height:90px;border:1px solid var(--border);border-radius:8px;padding:8px;font-size:12px;margin-bottom:6px">${IMPORT_COLS.map(c => '<span class="badge gray" style="margin:2px">' + U.esc(c) + '</span>').join('')}</div>
+          <div class="table-scroll" style="max-height:90px;border:1px solid var(--border);border-radius:8px;padding:8px;font-size:12px;margin-bottom:6px">${importCols().map(c => '<span class="badge gray" style="margin:2px">' + U.esc(c) + '</span>').join('')}</div>
           <p class="muted" style="font-size:12px;margin:0 0 14px">Student ID is optional — blank IDs get auto‑numbered. Duplicate IDs are skipped. Fee columns are the total amount for each category (blank/0 = not applied).</p>
           <div class="flex gap wrap">
             <button class="btn sm" id="imTemplate">⬇ Download CSV template</button>
@@ -291,10 +293,11 @@
     $('#imClose', root).onclick = close; $('#imCancel', root).onclick = close;
     $('#imBackdrop', root).onclick = e => { if (e.target.id === 'imBackdrop') close(); };
     $('#imTemplate', root).onclick = () => {
+      const cols = importCols();
       const example = ['26270480', 'RIYAN AHMED', 'VI', 'RAGAVI', 'BOY', '2015-06-01', 'ABDUL AHMED',
-        'FATHIMA', '9000000000', 'PATHAMADAI', 'SCHOOL', 'TN72 BUS 1', 'MUSLIM', '0', 'NEW', 'CRICKET',
-        'AKB SCHOOL', '36000', '22500', '0', '5350', '8000', '0', '0'];
-      U.download('akb_student_import_template.csv', U.toCSV([IMPORT_COLS, example]), 'text/csv');
+        'FATHIMA', '9000000000', 'PATHAMADAI', 'SCHOOL', 'TN72 BUS 1', 'MUSLIM', '0', 'NEW', 'CRICKET', 'AKB SCHOOL']
+        .concat(Store.HEAD_ORDER.map(() => '0'));
+      U.download('akb_student_import_template.csv', U.toCSV([cols, example]), 'text/csv');
     };
     $('#imFile', root).onchange = (e) => {
       const f = e.target.files[0]; if (!f) return;
@@ -1291,11 +1294,51 @@
             <button class="btn" id="expAllCsv">⬇ Students + Fees (CSV)</button>
           </div>
         </div></div>
+      <div class="panel"><div class="panel-head"><h2>Fee Categories</h2><span class="muted">used across fees, receipts, dashboards & reports</span></div>
+        <div class="table-scroll"><table>
+          <thead><tr><th>Fee Category</th><th>Business (receipt)</th><th class="t-right">Order</th><th class="t-right">Actions</th></tr></thead>
+          <tbody id="fhBody"></tbody></table></div>
+        <div class="panel-body pad">
+          <div class="toolbar">
+            <input id="fhLabel" placeholder="New fee category (e.g. Exam Fees)" style="min-width:220px"/>
+            <select id="fhBiz">${Store.BUSINESS_ORDER.map(b => `<option value="${b}">${U.esc(Store.BUSINESSES[b].name)}</option>`).join('')}</select>
+            <button class="btn primary sm" id="fhAdd">＋ Add fee category</button>
+          </div>
+          <p class="muted" style="font-size:12px;margin:8px 0 0">The business controls which firm's receipt a fee is billed under. New categories are added to every student at ₹0 — set amounts via Edit, Add Student, or Import.</p>
+        </div></div>
       <div class="panel"><div class="panel-head"><h2>Danger Zone</h2></div>
         <div class="panel-body pad">
           <p class="muted">Reset discards all app-recorded payments and reloads the original student list & balances from the bundled workbook data.</p>
           <button class="btn danger" id="resetBtn">↺ Reset to Original Workbook Data</button>
         </div></div>`;
+
+    function renderFeeHeads() {
+      const bizOpts = k => Store.BUSINESS_ORDER.map(b => `<option value="${b}"${Store.HEAD_BUSINESS[k] === b ? ' selected' : ''}>${U.esc(Store.BUSINESSES[b].name)}</option>`).join('');
+      $('#fhBody').innerHTML = Store.HEAD_ORDER.map((k, i) => `<tr>
+        <td><b>${U.esc(Store.HEAD_LABELS[k])}</b></td>
+        <td><select class="fh-biz" data-k="${k}" style="padding:5px 8px;border:1px solid var(--border);border-radius:7px">${bizOpts(k)}</select></td>
+        <td class="t-right"><button class="btn sm" data-up="${k}" ${i === 0 ? 'disabled' : ''}>▲</button> <button class="btn sm" data-down="${k}" ${i === Store.HEAD_ORDER.length - 1 ? 'disabled' : ''}>▼</button></td>
+        <td class="t-right"><button class="btn sm" data-rename="${k}">Rename</button> <button class="btn sm danger" data-del="${k}">Delete</button></td></tr>`).join('');
+      $$('.fh-biz', view()).forEach(sel => sel.onchange = async () => { await Store.updateFeeHead(sel.dataset.k, null, sel.value); U.toast('Updated', 'success'); });
+      $$('[data-up]', view()).forEach(b => b.onclick = async () => { await Store.moveFeeHead(b.dataset.up, -1); renderFeeHeads(); });
+      $$('[data-down]', view()).forEach(b => b.onclick = async () => { await Store.moveFeeHead(b.dataset.down, 1); renderFeeHeads(); });
+      $$('[data-rename]', view()).forEach(b => b.onclick = async () => {
+        const cur = Store.HEAD_LABELS[b.dataset.rename]; const nv = prompt('Rename fee category:', cur);
+        if (nv && nv.trim() && nv.trim() !== cur) { await Store.updateFeeHead(b.dataset.rename, nv.trim(), null); U.toast('Renamed', 'success'); renderFeeHeads(); }
+      });
+      $$('[data-del]', view()).forEach(b => b.onclick = async () => {
+        const k = b.dataset.del; const lbl = Store.HEAD_LABELS[k];
+        const warn = Store.feeHeadHasMoney(k) ? '\n\nThis category HAS amounts recorded — deleting removes it from every student.' : '';
+        if (!confirm('Delete fee category "' + lbl + '"?' + warn)) return;
+        await Store.deleteFeeHead(k); U.toast('Deleted', 'success'); renderFeeHeads();
+      });
+    }
+    $('#fhAdd').onclick = async () => {
+      try { await Store.addFeeHead($('#fhLabel').value, $('#fhBiz').value); $('#fhLabel').value = ''; U.toast('Fee category added', 'success'); renderFeeHeads(); }
+      catch (e) { U.toast(e.message, 'error'); }
+    };
+    renderFeeHeads();
+
     $('#expJson').onclick = () => { U.download('akb_fees_backup_' + U.todayISO() + '.json', JSON.stringify(Store.exportAll(true)), 'application/json'); U.toast('Backup downloaded', 'success'); };
     $('#expAllCsv').onclick = exportStudentsCSV;
     $('#impJson').onchange = e => {

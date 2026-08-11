@@ -32,13 +32,26 @@
     'Summer Camp'
   ];
   const MODES = ['Cash', 'G.Pay', 'Bank', 'Cheque', 'Card'];
-  // Ordered fee heads for consistent display (matches the Chairman Dashboard)
-  const HEAD_ORDER = ['term', 'supplies', 'app_fees', 'uniform', 'transport', 'extra_curricular', 'evening_sports'];
-  const HEAD_LABELS = {
-    term: 'Terms Fees', supplies: 'School Supplies', app_fees: 'App Fees Paid',
-    uniform: 'Uniform & Accessories', transport: 'Transport Fees',
-    extra_curricular: 'Extra Curricular Fees', evening_sports: 'Evening Sports'
-  };
+  // Default fee categories (admin can add/rename/remove/reorder these at runtime).
+  // Each: {key, label, business}. Term is split into three terms; Event Fees added.
+  const DEFAULT_FEE_HEADS = [
+    { key: 'term1', label: 'Term 1 Fees', business: 'school' },
+    { key: 'term2', label: 'Term 2 Fees', business: 'school' },
+    { key: 'term3', label: 'Term 3 Fees', business: 'school' },
+    { key: 'supplies', label: 'School Supplies', business: 'co' },
+    { key: 'app_fees', label: 'App Fees Paid', business: 'school' },
+    { key: 'uniform', label: 'Uniform & Accessories', business: 'co' },
+    { key: 'transport', label: 'Transport Fees', business: 'falcon' },
+    { key: 'extra_curricular', label: 'Extra Curricular Fees', business: 'school' },
+    { key: 'evening_sports', label: 'Evening Sports', business: 'sports' },
+    { key: 'event', label: 'Event Fees', business: 'school' }
+  ];
+  // These are kept in sync (mutated in place) by rebuildHeads() from the active
+  // fee-head config, so views that read Store.HEAD_ORDER/HEAD_LABELS stay current.
+  const HEAD_ORDER = [];
+  const HEAD_LABELS = {};
+  const HEAD_BUSINESS = {};
+  const BUSINESS = {}; // fee head -> business display name (Chairman Dashboard)
   // The 4 businesses, each issuing its own receipt with its own logo
   const BUSINESSES = {
     school: { key: 'school', name: 'AKB School of Excellence', sub: 'Senior Secondary CBSE School', logo: 'assets/img/logo-school.svg', logoFull: 'assets/img/logo-school-full.svg', color: '#7f1d1d', prefix: 'AKB' },
@@ -50,14 +63,22 @@
   // School WhatsApp / contact number (shown on receipts & in reminders)
   const SCHOOL_WHATSAPP = '+919003950980';
   const SCHOOL_WHATSAPP_DISPLAY = '+91 90039 50980';
-  // fee head -> business key
-  const HEAD_BUSINESS = {
-    term: 'school', app_fees: 'school', extra_curricular: 'school',
-    supplies: 'co', uniform: 'co', transport: 'falcon', evening_sports: 'sports'
-  };
-  // legacy: fee head -> business display name (used by Chairman Dashboard)
-  const BUSINESS = {};
-  Object.keys(HEAD_BUSINESS).forEach(k => { BUSINESS[k] = BUSINESSES[HEAD_BUSINESS[k]].name; });
+
+  // Rebuild the HEAD_* lookups (in place) from a fee-head config array.
+  function rebuildHeads(feeHeads) {
+    HEAD_ORDER.length = 0;
+    Object.keys(HEAD_LABELS).forEach(k => delete HEAD_LABELS[k]);
+    Object.keys(HEAD_BUSINESS).forEach(k => delete HEAD_BUSINESS[k]);
+    Object.keys(BUSINESS).forEach(k => delete BUSINESS[k]);
+    (feeHeads || []).forEach(h => {
+      const biz = BUSINESSES[h.business] ? h.business : 'school';
+      HEAD_ORDER.push(h.key);
+      HEAD_LABELS[h.key] = h.label;
+      HEAD_BUSINESS[h.key] = biz;
+      BUSINESS[h.key] = BUSINESSES[biz].name;
+    });
+  }
+  rebuildHeads(DEFAULT_FEE_HEADS); // valid defaults at module load
 
   let db = null;
   let useIDB = true;
@@ -66,10 +87,11 @@
     students: [],   // in-memory cache
     payments: [],
     users: [],
+    feeHeads: [],
     meta: {},
     currentUser: null,
     ENTITIES, MODES, HEAD_ORDER, HEAD_LABELS, BUSINESS, BUSINESSES, BUSINESS_ORDER, HEAD_BUSINESS,
-    SCHOOL_WHATSAPP, SCHOOL_WHATSAPP_DISPLAY,
+    SCHOOL_WHATSAPP, SCHOOL_WHATSAPP_DISPLAY, DEFAULT_FEE_HEADS,
 
     async init() {
       try {
@@ -85,6 +107,15 @@
       if (!this.users.length) {
         await this.seedUsers();
       }
+      // fee-head config (admin-editable); default on first run
+      if (!Array.isArray(this.meta.feeHeads) || !this.meta.feeHeads.length) {
+        this.meta.feeHeads = DEFAULT_FEE_HEADS.map(h => Object.assign({}, h));
+      }
+      this.feeHeads = this.meta.feeHeads;
+      rebuildHeads(this.feeHeads);
+      const changed = this.migrateLegacyHeads() | this.ensureStudentHeads();
+      await this.persistMeta();
+      if (changed) await this.persistStudents();
       // derive computed totals once
       this.recomputeAll();
       return this;
@@ -282,6 +313,76 @@
       return s;
     },
 
+    /* ---- fee categories (admin-managed) ---- */
+    // Rename the legacy single 'term' head to 'term1' (one-time, preserves amounts)
+    migrateLegacyHeads() {
+      let changed = 0;
+      const hasTerm1 = HEAD_ORDER.indexOf('term1') >= 0;
+      this.students.forEach(s => {
+        s.fees = s.fees || {};
+        const t1 = s.fees.term1;
+        if (hasTerm1 && s.fees.term && (!t1 || (!t1.total && !t1.paid))) {
+          const t = s.fees.term;
+          s.fees.term1 = { label: HEAD_LABELS.term1 || 'Term 1 Fees', total: t.total, paid: t.paid, balance: t.balance };
+          delete s.fees.term; changed = 1;
+        }
+      });
+      return changed;
+    },
+    // Make sure every student has an entry for every current fee head
+    ensureStudentHeads() {
+      let changed = 0;
+      this.students.forEach(s => {
+        s.fees = s.fees || {};
+        HEAD_ORDER.forEach(k => {
+          if (!s.fees[k]) { s.fees[k] = { label: HEAD_LABELS[k], total: 0, paid: 0, balance: 0 }; changed = 1; }
+        });
+      });
+      return changed;
+    },
+    async _saveFeeHeads() {
+      this.meta.feeHeads = this.feeHeads;
+      rebuildHeads(this.feeHeads);
+      await this.persistMeta();
+    },
+    _slugKey(label) {
+      let base = String(label).toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'fee';
+      let k = base, i = 2;
+      while (this.feeHeads.some(h => h.key === k)) k = base + '_' + (i++);
+      return k;
+    },
+    async addFeeHead(label, business) {
+      label = String(label || '').trim();
+      if (!label) throw new Error('Fee category name is required');
+      if (this.feeHeads.some(h => h.label.toLowerCase() === label.toLowerCase())) throw new Error('That fee category already exists');
+      const biz = BUSINESSES[business] ? business : 'school';
+      const key = this._slugKey(label);
+      this.feeHeads.push({ key, label, business: biz });
+      this.students.forEach(s => { s.fees[key] = { label, total: 0, paid: 0, balance: 0 }; });
+      await this._saveFeeHeads(); await this.persistStudents();
+      return key;
+    },
+    async updateFeeHead(key, label, business) {
+      const h = this.feeHeads.find(x => x.key === key); if (!h) return;
+      if (label != null) { label = String(label).trim(); if (label) { h.label = label; this.students.forEach(s => { if (s.fees[key]) s.fees[key].label = label; }); } }
+      if (business != null && BUSINESSES[business]) h.business = business;
+      await this._saveFeeHeads(); await this.persistStudents();
+    },
+    async deleteFeeHead(key) {
+      this.feeHeads = this.feeHeads.filter(h => h.key !== key);
+      this.students.forEach(s => { delete s.fees[key]; });
+      await this._saveFeeHeads(); await this.persistStudents();
+    },
+    async moveFeeHead(key, dir) {
+      const i = this.feeHeads.findIndex(h => h.key === key); if (i < 0) return;
+      const j = i + dir; if (j < 0 || j >= this.feeHeads.length) return;
+      const tmp = this.feeHeads[i]; this.feeHeads[i] = this.feeHeads[j]; this.feeHeads[j] = tmp;
+      await this._saveFeeHeads();
+    },
+    feeHeadHasMoney(key) {
+      return this.students.some(s => s.fees[key] && (s.fees[key].total > 0 || s.fees[key].paid > 0));
+    },
+
     /* ---- students: edit ---- */
     async saveStudent(s) {
       this.recompute(s);
@@ -412,6 +513,12 @@
         LS.setItem('akb_meta', JSON.stringify(this.meta));
         if (Array.isArray(obj.users) && obj.users.length) LS.setItem('akb_users', JSON.stringify(this.users));
       }
+      // re-apply fee-head config from the restored data (or defaults) and reconcile students
+      if (!Array.isArray(this.meta.feeHeads) || !this.meta.feeHeads.length) this.meta.feeHeads = DEFAULT_FEE_HEADS.map(h => Object.assign({}, h));
+      this.feeHeads = this.meta.feeHeads;
+      rebuildHeads(this.feeHeads);
+      this.migrateLegacyHeads(); this.ensureStudentHeads();
+      await this.persistStudents(); await this.persistMeta();
       this.recomputeAll();
     }
   };

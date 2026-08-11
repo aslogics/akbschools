@@ -488,13 +488,26 @@ window.__AKB_SEED__ = {"school": "AKB School of Excellence", "year": "2026-2027"
     'Summer Camp'
   ];
   const MODES = ['Cash', 'G.Pay', 'Bank', 'Cheque', 'Card'];
-  // Ordered fee heads for consistent display (matches the Chairman Dashboard)
-  const HEAD_ORDER = ['term', 'supplies', 'app_fees', 'uniform', 'transport', 'extra_curricular', 'evening_sports'];
-  const HEAD_LABELS = {
-    term: 'Terms Fees', supplies: 'School Supplies', app_fees: 'App Fees Paid',
-    uniform: 'Uniform & Accessories', transport: 'Transport Fees',
-    extra_curricular: 'Extra Curricular Fees', evening_sports: 'Evening Sports'
-  };
+  // Default fee categories (admin can add/rename/remove/reorder these at runtime).
+  // Each: {key, label, business}. Term is split into three terms; Event Fees added.
+  const DEFAULT_FEE_HEADS = [
+    { key: 'term1', label: 'Term 1 Fees', business: 'school' },
+    { key: 'term2', label: 'Term 2 Fees', business: 'school' },
+    { key: 'term3', label: 'Term 3 Fees', business: 'school' },
+    { key: 'supplies', label: 'School Supplies', business: 'co' },
+    { key: 'app_fees', label: 'App Fees Paid', business: 'school' },
+    { key: 'uniform', label: 'Uniform & Accessories', business: 'co' },
+    { key: 'transport', label: 'Transport Fees', business: 'falcon' },
+    { key: 'extra_curricular', label: 'Extra Curricular Fees', business: 'school' },
+    { key: 'evening_sports', label: 'Evening Sports', business: 'sports' },
+    { key: 'event', label: 'Event Fees', business: 'school' }
+  ];
+  // These are kept in sync (mutated in place) by rebuildHeads() from the active
+  // fee-head config, so views that read Store.HEAD_ORDER/HEAD_LABELS stay current.
+  const HEAD_ORDER = [];
+  const HEAD_LABELS = {};
+  const HEAD_BUSINESS = {};
+  const BUSINESS = {}; // fee head -> business display name (Chairman Dashboard)
   // The 4 businesses, each issuing its own receipt with its own logo
   const BUSINESSES = {
     school: { key: 'school', name: 'AKB School of Excellence', sub: 'Senior Secondary CBSE School', logo: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMjAgMTIwIiByb2xlPSJpbWciIGFyaWEtbGFiZWw9IkFLQiBTY2hvb2wgb2YgRXhjZWxsZW5jZSI+CiAgPGRlZnM+PHN0eWxlPi5te2ZpbGw6IzdhMTQyMH0uY3tmaWxsOiNmNmVlZGF9LmJ7ZmlsbDojMjI0MDlhfTwvc3R5bGU+PC9kZWZzPgogIDwhLS0gY3Jvd24gLS0+CiAgPGcgY2xhc3M9Im0iPgogICAgPHBhdGggZD0iTTQ1IDMxIEw0MCAxNSBMNTAgMjIgTDYwIDkgTDcwIDIyIEw4MCAxNSBMNzUgMzEgWiIvPgogICAgPGNpcmNsZSBjeD0iNjAiIGN5PSI2IiByPSIzIi8+PGNpcmNsZSBjeD0iNDAiIGN5PSIxMiIgcj0iMi40Ii8+PGNpcmNsZSBjeD0iODAiIGN5PSIxMiIgcj0iMi40Ii8+CiAgPC9nPgogIDwhLS0gc2hpZWxkOiBtYXJvb24gYm9yZGVyICsgY3JlYW0gaW50ZXJpb3IgLS0+CiAgPHBhdGggZD0iTTMzIDMzIEg4NyBWNjQgQzg3IDg0IDc1IDk1IDYwIDEwMSBDNDUgOTUgMzMgODQgMzMgNjQgWiIgY2xhc3M9Im0iLz4KICA8cGF0aCBkPSJNMzggMzggSDgyIFY2MyBDODIgODAgNzIgODkgNjAgOTUgQzQ4IDg5IDM4IDgwIDM4IDYzIFoiIGNsYXNzPSJjIi8+CiAgPCEtLSBBS0IgLS0+CiAgPHRleHQgeD0iNjAiIHk9IjY1IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmb250LWZhbWlseT0iR2VvcmdpYSwnVGltZXMgTmV3IFJvbWFuJyxzZXJpZiIgZm9udC13ZWlnaHQ9IjgwMCIgZm9udC1zaXplPSIyMyIgY2xhc3M9Im0iIGxldHRlci1zcGFjaW5nPSItMSI+QUtCPC90ZXh0PgogIDwhLS0gc3RhcnMgLS0+CiAgPHRleHQgeD0iNjAiIHk9Ijc1IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmb250LXNpemU9IjcuNSIgY2xhc3M9ImIiIGxldHRlci1zcGFjaW5nPSIxLjUiPiYjOTczMzsmIzk3MzM7JiM5NzMzOyYjOTczMzsmIzk3MzM7PC90ZXh0PgogIDwhLS0gb3BlbiBib29rIC0tPgogIDxnPgogICAgPHBhdGggZD0iTTQ5IDgwIEM1MyA3NyA1NyA3NyA2MCA3OSBDNjMgNzcgNjcgNzcgNzEgODAgTDcxIDkxIEM2NyA4OCA2MyA4OCA2MCA5MCBDNTcgODggNTMgODggNDkgOTEgWiIgY2xhc3M9Im0iLz4KICAgIDxsaW5lIHgxPSI2MCIgeTE9Ijc5IiB4Mj0iNjAiIHkyPSI5MCIgc3Ryb2tlPSIjZjZlZWRhIiBzdHJva2Utd2lkdGg9IjEuMiIvPgogIDwvZz4KICA8IS0tIGJsdWUgZmxvdXJpc2hlcyAtLT4KICA8ZyBmaWxsPSJub25lIiBzdHJva2U9IiMyMjQwOWEiIHN0cm9rZS13aWR0aD0iMyIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIj4KICAgIDxwYXRoIGQ9Ik0zMiA2NiBDMjIgNjAgMTUgNjMgMTEgNzEgQzE3IDY3IDIzIDY4IDI3IDczIEMyOSA2OSAzMSA2OCAzMyA2OSIvPgogICAgPHBhdGggZD0iTTg4IDY2IEM5OCA2MCAxMDUgNjMgMTA5IDcxIEMxMDMgNjcgOTcgNjggOTMgNzMgQzkxIDY5IDg5IDY4IDg3IDY5Ii8+CiAgPC9nPgo8L3N2Zz4K', logoFull: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA3MjAgMjE0IiByb2xlPSJpbWciIGFyaWEtbGFiZWw9IkFLQiBTY2hvb2wgb2YgRXhjZWxsZW5jZSDigJQgU2VuaW9yIFNlY29uZGFyeSBDQlNFIFNjaG9vbCI+CiAgPGRlZnM+PHN0eWxlPi5te2ZpbGw6IzdhMTQyMH0uY3tmaWxsOiNmNmVlZGF9LmJ7ZmlsbDojMjI0MDlhfTwvc3R5bGU+PC9kZWZzPgogIDwhLS0gY3Jlc3QgZW1ibGVtIChjZW50ZXJlZCkgLS0+CiAgPGcgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoMzEyLDIpIHNjYWxlKDAuODIpIj4KICAgIDxnIGNsYXNzPSJtIj4KICAgICAgPHBhdGggZD0iTTQ1IDMxIEw0MCAxNSBMNTAgMjIgTDYwIDkgTDcwIDIyIEw4MCAxNSBMNzUgMzEgWiIvPgogICAgICA8Y2lyY2xlIGN4PSI2MCIgY3k9IjYiIHI9IjMiLz48Y2lyY2xlIGN4PSI0MCIgY3k9IjEyIiByPSIyLjQiLz48Y2lyY2xlIGN4PSI4MCIgY3k9IjEyIiByPSIyLjQiLz4KICAgIDwvZz4KICAgIDxwYXRoIGQ9Ik0zMyAzMyBIODcgVjY0IEM4NyA4NCA3NSA5NSA2MCAxMDEgQzQ1IDk1IDMzIDg0IDMzIDY0IFoiIGNsYXNzPSJtIi8+CiAgICA8cGF0aCBkPSJNMzggMzggSDgyIFY2MyBDODIgODAgNzIgODkgNjAgOTUgQzQ4IDg5IDM4IDgwIDM4IDYzIFoiIGNsYXNzPSJjIi8+CiAgICA8dGV4dCB4PSI2MCIgeT0iNjUiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZvbnQtZmFtaWx5PSJHZW9yZ2lhLCdUaW1lcyBOZXcgUm9tYW4nLHNlcmlmIiBmb250LXdlaWdodD0iODAwIiBmb250LXNpemU9IjIzIiBjbGFzcz0ibSIgbGV0dGVyLXNwYWNpbmc9Ii0xIj5BS0I8L3RleHQ+CiAgICA8dGV4dCB4PSI2MCIgeT0iNzUiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZvbnQtc2l6ZT0iNy41IiBjbGFzcz0iYiIgbGV0dGVyLXNwYWNpbmc9IjEuNSI+JiM5NzMzOyYjOTczMzsmIzk3MzM7JiM5NzMzOyYjOTczMzs8L3RleHQ+CiAgICA8cGF0aCBkPSJNNDkgODAgQzUzIDc3IDU3IDc3IDYwIDc5IEM2MyA3NyA2NyA3NyA3MSA4MCBMNzEgOTEgQzY3IDg4IDYzIDg4IDYwIDkwIEM1NyA4OCA1MyA4OCA0OSA5MSBaIiBjbGFzcz0ibSIvPgogICAgPGxpbmUgeDE9IjYwIiB5MT0iNzkiIHgyPSI2MCIgeTI9IjkwIiBzdHJva2U9IiNmNmVlZGEiIHN0cm9rZS13aWR0aD0iMS4yIi8+CiAgICA8ZyBmaWxsPSJub25lIiBzdHJva2U9IiMyMjQwOWEiIHN0cm9rZS13aWR0aD0iMyIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIj4KICAgICAgPHBhdGggZD0iTTMyIDY2IEMyMiA2MCAxNSA2MyAxMSA3MSBDMTcgNjcgMjMgNjggMjcgNzMgQzI5IDY5IDMxIDY4IDMzIDY5Ii8+CiAgICAgIDxwYXRoIGQ9Ik04OCA2NiBDOTggNjAgMTA1IDYzIDEwOSA3MSBDMTAzIDY3IDk3IDY4IDkzIDczIEM5MSA2OSA4OSA2OCA4NyA2OSIvPgogICAgPC9nPgogIDwvZz4KICA8IS0tIHdvcmRtYXJrIC0tPgogIDx0ZXh0IHg9IjM2MCIgeT0iMTQwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmb250LWZhbWlseT0iR2VvcmdpYSwnVGltZXMgTmV3IFJvbWFuJyxzZXJpZiIgZm9udC13ZWlnaHQ9IjgwMCIgZm9udC1zaXplPSI0MiIgY2xhc3M9Im0iIGxldHRlci1zcGFjaW5nPSIwIj5BS0IgU0NIT09MIE9GIEVYQ0VMTEVOQ0U8L3RleHQ+CiAgPHRleHQgeD0iMzYwIiB5PSIxNjYiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZvbnQtZmFtaWx5PSJBcmlhbCxIZWx2ZXRpY2Esc2Fucy1zZXJpZiIgZm9udC13ZWlnaHQ9IjcwMCIgZm9udC1zaXplPSIxOCIgY2xhc3M9Im0iIGxldHRlci1zcGFjaW5nPSIyIj5TRU5JT1IgU0VDT05EQVJZIENCU0UgU0NIT09MPC90ZXh0PgogIDwhLS0gYmFubmVyIC0tPgogIDxwb2x5Z29uIHBvaW50cz0iMjM2LDE3NCA0ODQsMTc0IDQ5OCwxODggNDg0LDIwMiAyMzYsMjAyIDIyMiwxODgiIGNsYXNzPSJiIi8+CiAgPHRleHQgeD0iMzYwIiB5PSIxOTMiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZvbnQtZmFtaWx5PSJBcmlhbCxIZWx2ZXRpY2Esc2Fucy1zZXJpZiIgZm9udC13ZWlnaHQ9IjcwMCIgZm9udC1zaXplPSIxNCIgZmlsbD0iI2ZmZmZmZiIgbGV0dGVyLXNwYWNpbmc9IjIiPkVYQ0VMTEVOQ0UgSU4gRURVQ0FUSU9OPC90ZXh0Pgo8L3N2Zz4K', color: '#7f1d1d', prefix: 'AKB' },
@@ -506,14 +519,22 @@ window.__AKB_SEED__ = {"school": "AKB School of Excellence", "year": "2026-2027"
   // School WhatsApp / contact number (shown on receipts & in reminders)
   const SCHOOL_WHATSAPP = '+919003950980';
   const SCHOOL_WHATSAPP_DISPLAY = '+91 90039 50980';
-  // fee head -> business key
-  const HEAD_BUSINESS = {
-    term: 'school', app_fees: 'school', extra_curricular: 'school',
-    supplies: 'co', uniform: 'co', transport: 'falcon', evening_sports: 'sports'
-  };
-  // legacy: fee head -> business display name (used by Chairman Dashboard)
-  const BUSINESS = {};
-  Object.keys(HEAD_BUSINESS).forEach(k => { BUSINESS[k] = BUSINESSES[HEAD_BUSINESS[k]].name; });
+
+  // Rebuild the HEAD_* lookups (in place) from a fee-head config array.
+  function rebuildHeads(feeHeads) {
+    HEAD_ORDER.length = 0;
+    Object.keys(HEAD_LABELS).forEach(k => delete HEAD_LABELS[k]);
+    Object.keys(HEAD_BUSINESS).forEach(k => delete HEAD_BUSINESS[k]);
+    Object.keys(BUSINESS).forEach(k => delete BUSINESS[k]);
+    (feeHeads || []).forEach(h => {
+      const biz = BUSINESSES[h.business] ? h.business : 'school';
+      HEAD_ORDER.push(h.key);
+      HEAD_LABELS[h.key] = h.label;
+      HEAD_BUSINESS[h.key] = biz;
+      BUSINESS[h.key] = BUSINESSES[biz].name;
+    });
+  }
+  rebuildHeads(DEFAULT_FEE_HEADS); // valid defaults at module load
 
   let db = null;
   let useIDB = true;
@@ -522,10 +543,11 @@ window.__AKB_SEED__ = {"school": "AKB School of Excellence", "year": "2026-2027"
     students: [],   // in-memory cache
     payments: [],
     users: [],
+    feeHeads: [],
     meta: {},
     currentUser: null,
     ENTITIES, MODES, HEAD_ORDER, HEAD_LABELS, BUSINESS, BUSINESSES, BUSINESS_ORDER, HEAD_BUSINESS,
-    SCHOOL_WHATSAPP, SCHOOL_WHATSAPP_DISPLAY,
+    SCHOOL_WHATSAPP, SCHOOL_WHATSAPP_DISPLAY, DEFAULT_FEE_HEADS,
 
     async init() {
       try {
@@ -541,6 +563,15 @@ window.__AKB_SEED__ = {"school": "AKB School of Excellence", "year": "2026-2027"
       if (!this.users.length) {
         await this.seedUsers();
       }
+      // fee-head config (admin-editable); default on first run
+      if (!Array.isArray(this.meta.feeHeads) || !this.meta.feeHeads.length) {
+        this.meta.feeHeads = DEFAULT_FEE_HEADS.map(h => Object.assign({}, h));
+      }
+      this.feeHeads = this.meta.feeHeads;
+      rebuildHeads(this.feeHeads);
+      const changed = this.migrateLegacyHeads() | this.ensureStudentHeads();
+      await this.persistMeta();
+      if (changed) await this.persistStudents();
       // derive computed totals once
       this.recomputeAll();
       return this;
@@ -738,6 +769,76 @@ window.__AKB_SEED__ = {"school": "AKB School of Excellence", "year": "2026-2027"
       return s;
     },
 
+    /* ---- fee categories (admin-managed) ---- */
+    // Rename the legacy single 'term' head to 'term1' (one-time, preserves amounts)
+    migrateLegacyHeads() {
+      let changed = 0;
+      const hasTerm1 = HEAD_ORDER.indexOf('term1') >= 0;
+      this.students.forEach(s => {
+        s.fees = s.fees || {};
+        const t1 = s.fees.term1;
+        if (hasTerm1 && s.fees.term && (!t1 || (!t1.total && !t1.paid))) {
+          const t = s.fees.term;
+          s.fees.term1 = { label: HEAD_LABELS.term1 || 'Term 1 Fees', total: t.total, paid: t.paid, balance: t.balance };
+          delete s.fees.term; changed = 1;
+        }
+      });
+      return changed;
+    },
+    // Make sure every student has an entry for every current fee head
+    ensureStudentHeads() {
+      let changed = 0;
+      this.students.forEach(s => {
+        s.fees = s.fees || {};
+        HEAD_ORDER.forEach(k => {
+          if (!s.fees[k]) { s.fees[k] = { label: HEAD_LABELS[k], total: 0, paid: 0, balance: 0 }; changed = 1; }
+        });
+      });
+      return changed;
+    },
+    async _saveFeeHeads() {
+      this.meta.feeHeads = this.feeHeads;
+      rebuildHeads(this.feeHeads);
+      await this.persistMeta();
+    },
+    _slugKey(label) {
+      let base = String(label).toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'fee';
+      let k = base, i = 2;
+      while (this.feeHeads.some(h => h.key === k)) k = base + '_' + (i++);
+      return k;
+    },
+    async addFeeHead(label, business) {
+      label = String(label || '').trim();
+      if (!label) throw new Error('Fee category name is required');
+      if (this.feeHeads.some(h => h.label.toLowerCase() === label.toLowerCase())) throw new Error('That fee category already exists');
+      const biz = BUSINESSES[business] ? business : 'school';
+      const key = this._slugKey(label);
+      this.feeHeads.push({ key, label, business: biz });
+      this.students.forEach(s => { s.fees[key] = { label, total: 0, paid: 0, balance: 0 }; });
+      await this._saveFeeHeads(); await this.persistStudents();
+      return key;
+    },
+    async updateFeeHead(key, label, business) {
+      const h = this.feeHeads.find(x => x.key === key); if (!h) return;
+      if (label != null) { label = String(label).trim(); if (label) { h.label = label; this.students.forEach(s => { if (s.fees[key]) s.fees[key].label = label; }); } }
+      if (business != null && BUSINESSES[business]) h.business = business;
+      await this._saveFeeHeads(); await this.persistStudents();
+    },
+    async deleteFeeHead(key) {
+      this.feeHeads = this.feeHeads.filter(h => h.key !== key);
+      this.students.forEach(s => { delete s.fees[key]; });
+      await this._saveFeeHeads(); await this.persistStudents();
+    },
+    async moveFeeHead(key, dir) {
+      const i = this.feeHeads.findIndex(h => h.key === key); if (i < 0) return;
+      const j = i + dir; if (j < 0 || j >= this.feeHeads.length) return;
+      const tmp = this.feeHeads[i]; this.feeHeads[i] = this.feeHeads[j]; this.feeHeads[j] = tmp;
+      await this._saveFeeHeads();
+    },
+    feeHeadHasMoney(key) {
+      return this.students.some(s => s.fees[key] && (s.fees[key].total > 0 || s.fees[key].paid > 0));
+    },
+
     /* ---- students: edit ---- */
     async saveStudent(s) {
       this.recompute(s);
@@ -868,6 +969,12 @@ window.__AKB_SEED__ = {"school": "AKB School of Excellence", "year": "2026-2027"
         LS.setItem('akb_meta', JSON.stringify(this.meta));
         if (Array.isArray(obj.users) && obj.users.length) LS.setItem('akb_users', JSON.stringify(this.users));
       }
+      // re-apply fee-head config from the restored data (or defaults) and reconcile students
+      if (!Array.isArray(this.meta.feeHeads) || !this.meta.feeHeads.length) this.meta.feeHeads = DEFAULT_FEE_HEADS.map(h => Object.assign({}, h));
+      this.feeHeads = this.meta.feeHeads;
+      rebuildHeads(this.feeHeads);
+      this.migrateLegacyHeads(); this.ensureStudentHeads();
+      await this.persistStudents(); await this.persistMeta();
       this.recomputeAll();
     }
   };
@@ -1341,11 +1448,13 @@ window.__AKB_SEED__ = {"school": "AKB School of Excellence", "year": "2026-2027"
 
   /* -------------------------------------------------- Bulk import (CSV) */
   // Import column headers (also used for the downloadable template)
-  const IMPORT_COLS = ['Student ID', 'Name', 'Grade', 'Class Teacher', 'Gender', 'Date of Birth',
-    'Father Name', 'Mother Name', 'Contact Number', 'Location', 'Transport', 'Bus/Driver',
-    'Religion', 'Discount %', 'Admission', 'Sports Activity', 'Previous School',
-    'Terms Fees', 'School Supplies', 'App Fees Paid', 'Uniform & Accessories',
-    'Transport Fees', 'Extra Curricular Fees', 'Evening Sports'];
+  // base columns + the current (dynamic) fee-category labels
+  function importCols() {
+    return ['Student ID', 'Name', 'Grade', 'Class Teacher', 'Gender', 'Date of Birth',
+      'Father Name', 'Mother Name', 'Contact Number', 'Location', 'Transport', 'Bus/Driver',
+      'Religion', 'Discount %', 'Admission', 'Sports Activity', 'Previous School']
+      .concat(Store.HEAD_ORDER.map(k => Store.HEAD_LABELS[k]));
+  }
   function headerToKey(h) {
     const n = String(h).trim().toLowerCase().replace(/\s+/g, ' ');
     const map = {
@@ -1374,7 +1483,7 @@ window.__AKB_SEED__ = {"school": "AKB School of Excellence", "year": "2026-2027"
             <li>In Excel/Google Sheets, save your list as <b>CSV</b> (File → Save As / Download → CSV).</li>
             <li>Use these column headers (order doesn't matter; extra columns are ignored):</li>
           </ol>
-          <div class="table-scroll" style="max-height:90px;border:1px solid var(--border);border-radius:8px;padding:8px;font-size:12px;margin-bottom:6px">${IMPORT_COLS.map(c => '<span class="badge gray" style="margin:2px">' + U.esc(c) + '</span>').join('')}</div>
+          <div class="table-scroll" style="max-height:90px;border:1px solid var(--border);border-radius:8px;padding:8px;font-size:12px;margin-bottom:6px">${importCols().map(c => '<span class="badge gray" style="margin:2px">' + U.esc(c) + '</span>').join('')}</div>
           <p class="muted" style="font-size:12px;margin:0 0 14px">Student ID is optional — blank IDs get auto‑numbered. Duplicate IDs are skipped. Fee columns are the total amount for each category (blank/0 = not applied).</p>
           <div class="flex gap wrap">
             <button class="btn sm" id="imTemplate">⬇ Download CSV template</button>
@@ -1388,10 +1497,11 @@ window.__AKB_SEED__ = {"school": "AKB School of Excellence", "year": "2026-2027"
     $('#imClose', root).onclick = close; $('#imCancel', root).onclick = close;
     $('#imBackdrop', root).onclick = e => { if (e.target.id === 'imBackdrop') close(); };
     $('#imTemplate', root).onclick = () => {
+      const cols = importCols();
       const example = ['26270480', 'RIYAN AHMED', 'VI', 'RAGAVI', 'BOY', '2015-06-01', 'ABDUL AHMED',
-        'FATHIMA', '9000000000', 'PATHAMADAI', 'SCHOOL', 'TN72 BUS 1', 'MUSLIM', '0', 'NEW', 'CRICKET',
-        'AKB SCHOOL', '36000', '22500', '0', '5350', '8000', '0', '0'];
-      U.download('akb_student_import_template.csv', U.toCSV([IMPORT_COLS, example]), 'text/csv');
+        'FATHIMA', '9000000000', 'PATHAMADAI', 'SCHOOL', 'TN72 BUS 1', 'MUSLIM', '0', 'NEW', 'CRICKET', 'AKB SCHOOL']
+        .concat(Store.HEAD_ORDER.map(() => '0'));
+      U.download('akb_student_import_template.csv', U.toCSV([cols, example]), 'text/csv');
     };
     $('#imFile', root).onchange = (e) => {
       const f = e.target.files[0]; if (!f) return;
@@ -2388,11 +2498,51 @@ window.__AKB_SEED__ = {"school": "AKB School of Excellence", "year": "2026-2027"
             <button class="btn" id="expAllCsv">⬇ Students + Fees (CSV)</button>
           </div>
         </div></div>
+      <div class="panel"><div class="panel-head"><h2>Fee Categories</h2><span class="muted">used across fees, receipts, dashboards & reports</span></div>
+        <div class="table-scroll"><table>
+          <thead><tr><th>Fee Category</th><th>Business (receipt)</th><th class="t-right">Order</th><th class="t-right">Actions</th></tr></thead>
+          <tbody id="fhBody"></tbody></table></div>
+        <div class="panel-body pad">
+          <div class="toolbar">
+            <input id="fhLabel" placeholder="New fee category (e.g. Exam Fees)" style="min-width:220px"/>
+            <select id="fhBiz">${Store.BUSINESS_ORDER.map(b => `<option value="${b}">${U.esc(Store.BUSINESSES[b].name)}</option>`).join('')}</select>
+            <button class="btn primary sm" id="fhAdd">＋ Add fee category</button>
+          </div>
+          <p class="muted" style="font-size:12px;margin:8px 0 0">The business controls which firm's receipt a fee is billed under. New categories are added to every student at ₹0 — set amounts via Edit, Add Student, or Import.</p>
+        </div></div>
       <div class="panel"><div class="panel-head"><h2>Danger Zone</h2></div>
         <div class="panel-body pad">
           <p class="muted">Reset discards all app-recorded payments and reloads the original student list & balances from the bundled workbook data.</p>
           <button class="btn danger" id="resetBtn">↺ Reset to Original Workbook Data</button>
         </div></div>`;
+
+    function renderFeeHeads() {
+      const bizOpts = k => Store.BUSINESS_ORDER.map(b => `<option value="${b}"${Store.HEAD_BUSINESS[k] === b ? ' selected' : ''}>${U.esc(Store.BUSINESSES[b].name)}</option>`).join('');
+      $('#fhBody').innerHTML = Store.HEAD_ORDER.map((k, i) => `<tr>
+        <td><b>${U.esc(Store.HEAD_LABELS[k])}</b></td>
+        <td><select class="fh-biz" data-k="${k}" style="padding:5px 8px;border:1px solid var(--border);border-radius:7px">${bizOpts(k)}</select></td>
+        <td class="t-right"><button class="btn sm" data-up="${k}" ${i === 0 ? 'disabled' : ''}>▲</button> <button class="btn sm" data-down="${k}" ${i === Store.HEAD_ORDER.length - 1 ? 'disabled' : ''}>▼</button></td>
+        <td class="t-right"><button class="btn sm" data-rename="${k}">Rename</button> <button class="btn sm danger" data-del="${k}">Delete</button></td></tr>`).join('');
+      $$('.fh-biz', view()).forEach(sel => sel.onchange = async () => { await Store.updateFeeHead(sel.dataset.k, null, sel.value); U.toast('Updated', 'success'); });
+      $$('[data-up]', view()).forEach(b => b.onclick = async () => { await Store.moveFeeHead(b.dataset.up, -1); renderFeeHeads(); });
+      $$('[data-down]', view()).forEach(b => b.onclick = async () => { await Store.moveFeeHead(b.dataset.down, 1); renderFeeHeads(); });
+      $$('[data-rename]', view()).forEach(b => b.onclick = async () => {
+        const cur = Store.HEAD_LABELS[b.dataset.rename]; const nv = prompt('Rename fee category:', cur);
+        if (nv && nv.trim() && nv.trim() !== cur) { await Store.updateFeeHead(b.dataset.rename, nv.trim(), null); U.toast('Renamed', 'success'); renderFeeHeads(); }
+      });
+      $$('[data-del]', view()).forEach(b => b.onclick = async () => {
+        const k = b.dataset.del; const lbl = Store.HEAD_LABELS[k];
+        const warn = Store.feeHeadHasMoney(k) ? '\n\nThis category HAS amounts recorded — deleting removes it from every student.' : '';
+        if (!confirm('Delete fee category "' + lbl + '"?' + warn)) return;
+        await Store.deleteFeeHead(k); U.toast('Deleted', 'success'); renderFeeHeads();
+      });
+    }
+    $('#fhAdd').onclick = async () => {
+      try { await Store.addFeeHead($('#fhLabel').value, $('#fhBiz').value); $('#fhLabel').value = ''; U.toast('Fee category added', 'success'); renderFeeHeads(); }
+      catch (e) { U.toast(e.message, 'error'); }
+    };
+    renderFeeHeads();
+
     $('#expJson').onclick = () => { U.download('akb_fees_backup_' + U.todayISO() + '.json', JSON.stringify(Store.exportAll(true)), 'application/json'); U.toast('Backup downloaded', 'success'); };
     $('#expAllCsv').onclick = exportStudentsCSV;
     $('#impJson').onchange = e => {
@@ -2471,6 +2621,9 @@ window.__AKB_SEED__ = {"school": "AKB School of Excellence", "year": "2026-2027"
       document.getElementById('view').innerHTML = '<div class="empty">Something went wrong: ' + U.esc(e.message) + '</div>';
     }
     document.getElementById('sidebar').classList.remove('open');
+    // close any open modal/receipt when navigating
+    const mr = document.getElementById('modalRoot'); if (mr) mr.innerHTML = '';
+    document.body.classList.remove('receipt-open');
     window.scrollTo(0, 0);
   }
 
