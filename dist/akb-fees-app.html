@@ -1247,42 +1247,21 @@ window.__AKB_SEED__ = {"school": "AKB School of Excellence", "year": "2026-2027"
   }
   function remindButtons(s) {
     if (!s.contact || Store.studentTotals(s).balance <= 0) return '';
-    return `<button class="btn wa" data-remind="${U.esc(s.id)}" title="Send WhatsApp reminder from the school number">💬 WhatsApp</button>` +
-      `<a class="btn" href="${U.smsLink(s.contact, reminderText(s))}" title="Send SMS reminder">✉️ SMS</a>`;
+    const txt = reminderText(s);
+    return `<a class="btn wa" target="_blank" rel="noopener" href="${U.waLink(s.contact, txt)}" title="Open WhatsApp with the reminder">💬 WhatsApp</a>` +
+      `<a class="btn" href="${U.smsLink(s.contact, txt)}" title="Send SMS reminder">✉️ SMS</a>`;
   }
   function remindIcon(s) {
     if (!s.contact || Store.studentTotals(s).balance <= 0) return '';
-    return `<button class="btn sm wa" data-remind="${U.esc(s.id)}" title="WhatsApp reminder to ${U.esc(s.contact)}">💬</button> `;
+    return `<a class="btn sm wa" target="_blank" rel="noopener" href="${U.waLink(s.contact, reminderText(s))}" title="WhatsApp reminder to ${U.esc(s.contact)}">💬</a> `;
   }
-  // server-side WhatsApp API status (school "flow" number), cached
+  // server-side WhatsApp API status (optional; used only if an API provider is configured), cached
   let _waStatus;
   function getWaStatus() {
     if (_waStatus) return _waStatus;
     _waStatus = fetch('api/wa-status').then(r => r.ok ? r.json() : { configured: false }).catch(() => ({ configured: false }));
     return _waStatus;
   }
-  function recipientOf(s) { return { phone: s.contact, name: s.name, grade: s.grade || '', balance: U.inr(Store.studentTotals(s).balance), id: s.id }; }
-  // Single-tap reminder: send via the flow number when the API is set up;
-  // otherwise (offline single-file build) fall back to opening WhatsApp.
-  async function sendOneReminder(el) {
-    const s = Store.getStudent(el.dataset.remind); if (!s) return;
-    const st = await getWaStatus();
-    if (st && st.configured) {
-      const old = el.innerHTML; el.setAttribute('disabled', ''); el.innerHTML = '…';
-      try {
-        const r = await fetch('api/send-reminders', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ recipients: [recipientOf(s)] }) });
-        const j = await r.json(); if (!r.ok) throw new Error(j.error || 'failed');
-        if (j.sent) U.toast('Reminder sent to ' + s.name, 'success');
-        else U.toast('Not sent: ' + ((j.errors && j.errors[0]) || 'unknown error'), 'error');
-      } catch (e) { U.toast('Send failed: ' + e.message, 'error'); }
-      el.removeAttribute('disabled'); el.innerHTML = old;
-    } else if (!Store.serverMode()) {
-      window.open(U.waLink(s.contact, reminderText(s)), '_blank', 'noopener'); // offline: only option
-    } else {
-      U.toast('WhatsApp sending isn’t set up yet — add WA_PROVIDER / WA_TOKEN / WA_TEMPLATE on the server.', 'error');
-    }
-  }
-  document.addEventListener('click', e => { const el = e.target.closest('[data-remind]'); if (el) { e.preventDefault(); sendOneReminder(el); } });
 
   /* -------------------------------------------------- Dashboard */
   function dashboard() {
