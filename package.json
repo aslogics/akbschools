@@ -2,12 +2,16 @@
   "name": "akb-fee-collection",
   "version": "1.0.0",
   "private": true,
-  "description": "AKB School fee collection app — offline SPA with a tiny static server for deployment",
+  "description": "AKB School fee collection app — SPA with a Node server (shared state, Excel export, weekly email, WhatsApp reminders)",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
   },
   "engines": {
     "node": ">=18"
+  },
+  "dependencies": {
+    "exceljs": "^4.4.0",
+    "nodemailer": "^6.9.14"
   }
 }

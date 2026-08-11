@@ -1294,6 +1294,8 @@
             <button class="btn" id="expAllCsv">⬇ Students + Fees (CSV)</button>
           </div>
         </div></div>
+      <div class="panel"><div class="panel-head"><h2>Server &amp; Weekly Email Backup</h2><span class="muted" id="srvMode"></span></div>
+        <div class="panel-body pad" id="srvBox"><div class="muted">Checking…</div></div></div>
       <div class="panel"><div class="panel-head"><h2>Fee Categories</h2><span class="muted">used across fees, receipts, dashboards & reports</span></div>
         <div class="table-scroll"><table>
           <thead><tr><th>Fee Category</th><th>Business (receipt)</th><th class="t-right">Order</th><th class="t-right">Actions</th></tr></thead>
@@ -1351,6 +1353,34 @@
       rd.readAsText(f);
     };
     $('#resetBtn').onclick = async () => { if (!confirm('This will DELETE all payments recorded in the app and reload original balances. Continue?')) return; await Store.resetToSeed(); U.toast('Reset complete', 'success'); Router.render(); };
+
+    // Server / weekly email backup status
+    (async () => {
+      let st = null; try { const r = await fetch('api/backup-status'); if (r.ok) st = await r.json(); } catch (e) {}
+      const box = $('#srvBox'), mode = $('#srvMode'); if (!box) return;
+      if (!st) {
+        mode.innerHTML = '<span class="badge gray">Local (this browser)</span>';
+        box.innerHTML = '<p class="muted" style="margin:0">Not running on the server — data is stored only in this browser. Deploy on the server (Railway) to share data across devices and enable the weekly Excel email backup.</p>';
+        return;
+      }
+      mode.innerHTML = '<span class="badge green">Shared server mode</span>';
+      const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+      const sched = st.emailConfigured
+        ? ('emails <b>' + U.esc(st.to) + '</b> every <b>' + days[st.day] + ' ' + String(st.hour).padStart(2, '0') + ':00</b>')
+        : ('<span class="badge amber">email not configured</span> — set SMTP_* env vars to auto-email <b>' + U.esc(st.to) + '</b>');
+      box.innerHTML = `<p class="muted" style="margin:0 0 10px">Data is shared across all devices. Weekly Excel backup ${sched}. Last sent: <b>${st.lastBackupAt ? U.fmtDate(st.lastBackupAt.slice(0, 10)) : 'never'}</b>.</p>
+        <div class="flex gap wrap">
+          <a class="btn primary" href="api/backup.xlsx">⬇ Download Excel (all data + dashboard)</a>
+          <button class="btn ${st.emailConfigured ? '' : 'hidden'}" id="emailNow">✉️ Email backup now</button>
+        </div>`;
+      const en = $('#emailNow');
+      if (en) en.onclick = async () => {
+        en.disabled = true; en.textContent = 'Sending…';
+        try { const r = await fetch('api/send-backup', { method: 'POST' }); const j = await r.json(); if (!r.ok) throw new Error(j.error || 'failed'); U.toast('Backup emailed to ' + j.to, 'success'); }
+        catch (e) { U.toast('Email failed: ' + e.message, 'error'); }
+        en.disabled = false; en.textContent = '✉️ Email backup now';
+      };
+    })();
   }
 
   w.Views = { dashboard, students, studentDetail, businessDashboard, collect, collections, reports, users, data, openPaymentModal, changePassword };
