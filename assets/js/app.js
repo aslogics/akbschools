@@ -57,6 +57,9 @@
       document.getElementById('view').innerHTML = '<div class="empty">Something went wrong: ' + U.esc(e.message) + '</div>';
     }
     document.getElementById('sidebar').classList.remove('open');
+    // close any open modal/receipt when navigating
+    const mr = document.getElementById('modalRoot'); if (mr) mr.innerHTML = '';
+    document.body.classList.remove('receipt-open');
     window.scrollTo(0, 0);
   }
 
