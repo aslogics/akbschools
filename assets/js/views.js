@@ -268,6 +268,7 @@
     const map = {
       'student id': 'id', 'id': 'id', 'name': 'name', 'student name': 'name', 'grade': 'grade',
       'class teacher': 'classTeacher', 'gender': 'gender', 'date of birth': 'dob', 'dob': 'dob',
+      'date of admission': 'admissionDate', 'admission date': 'admissionDate', 'doa': 'admissionDate',
       'father name': 'father', 'father': 'father', 'mother name': 'mother', 'mother': 'mother',
       'contact number': 'contact', 'contact': 'contact', 'phone': 'contact', 'location': 'location',
       'location (from)': 'location', 'transport': 'transportType', 'transport (own/school)': 'transportType',
@@ -380,7 +381,8 @@
             ${textField('Grade', 'grade', '')}
             ${textField('Class Teacher', 'classTeacher', '')}
             ${textField('Gender', 'gender', '')}
-            ${textField('Date of Birth', 'dob', '')}
+            ${textField('Date of Birth', 'dob', '', 'date')}
+            ${textField('Date of Admission', 'admissionDate', '', 'date')}
             ${textField('Father Name', 'father', '')}
             ${textField('Mother Name', 'mother', '')}
             ${textField('Parent Mobile', 'contact', '')}
@@ -411,7 +413,7 @@
     $('#asSave', root).onclick = async () => {
       const get = f => { const el = $(`[data-f="${f}"]`, root); return el ? el.value.trim() : ''; };
       const data = { photo };
-      ['name', 'id', 'grade', 'classTeacher', 'gender', 'dob', 'father', 'mother', 'contact',
+      ['name', 'id', 'grade', 'classTeacher', 'gender', 'dob', 'admissionDate', 'father', 'mother', 'contact',
         'location', 'transportType', 'vehicle', 'religion', 'sportsActivity', 'admission'].forEach(f => data[f] = get(f));
       const pct = parseFloat(get('discountpct')); data.discount = isNaN(pct) ? 0 : pct / 100;
       data.fees = {};
@@ -615,7 +617,7 @@
               <div class="student-photo-box">${s.photo ? `<img src="${s.photo}" alt="${U.esc(s.name)}"/>` : '<span class="muted" style="font-size:12px">No photo</span>'}</div>
               <div class="info-list">${infoRows([
               ['Student Name', s.name], ['Student ID', s.id], ['Gender', s.gender],
-              ['Date Of Birth', s.dob ? U.fmtDate(s.dob) : ''], ['Age', s.age],
+              ['Date Of Birth', s.dob ? U.fmtDate(s.dob) : ''], ['Date Of Admission', s.admissionDate ? U.fmtDate(s.admissionDate) : ''], ['Age', s.age],
               ['Father Name', s.father], ['Mother Name', s.mother], ['Location (From)', s.location],
               ['Drop/Pick Location', s.dropLocation], ['Transport', s.transportType],
               ['Parent Mobile', s.contact], ['Religion', s.religion],
@@ -755,7 +757,7 @@
   function openEditModal(id) {
     const s = Store.getStudent(id); if (!s) return;
     const root = document.getElementById('modalRoot');
-    const feeInputs = Store.HEAD_ORDER.filter(k => k !== 'transport').map(k => {
+    const feeInputs = Store.HEAD_ORDER.filter(k => k !== 'transport' && Store.MULTI_HEADS.indexOf(k) < 0).map(k => {
       const h = s.fees[k];
       return `<div class="fee-row" style="grid-template-columns:1.4fr 1fr 1fr">
         <div class="fh-label">${U.esc(h.label)}</div>
@@ -773,6 +775,17 @@
         <input type="number" min="0" step="1" data-tr-paid="${m.key}" value="${m.paid}" title="Paid"/>
       </div>`).join('')}
       <p class="muted" style="font-size:12px;margin-top:6px">Tip: set the same monthly fee across Apr–Mar. The Transport Fees total on dashboards is the sum of these months.</p>`;
+    // Event & Extra-Curricular — a grid per named item (admin can add more)
+    const subGrids = Store.MULTI_HEADS.filter(k => Store.HEAD_ORDER.indexOf(k) >= 0).map(k => {
+      const label = Store.HEAD_LABELS[k];
+      return `<h4 class="sec">${U.esc(label)} — by item <button class="btn sm" data-editaddsub="${k}" style="margin-left:8px">＋ Add item</button></h4>
+        <div class="fee-head-hdr" style="grid-template-columns:1.4fr 1fr 1fr"><span>Item</span><span>Total</span><span>Paid</span></div>
+        ${Store.subBreakdown(s, k).map(it => `<div class="fee-row" style="grid-template-columns:1.4fr 1fr 1fr">
+          <div class="fh-label">${U.esc(it.label)}</div>
+          <input type="number" min="0" step="1" data-sub-total="${k}::${it.key}" value="${it.total}" title="Total"/>
+          <input type="number" min="0" step="1" data-sub-paid="${k}::${it.key}" value="${it.paid}" title="Paid"/>
+        </div>`).join('')}`;
+    }).join('');
     root.innerHTML = `
       <div class="modal-backdrop" id="edBackdrop"><div class="modal wide">
         <div class="modal-head"><h3>Edit — ${U.esc(s.name)}</h3><button class="x-close" id="edClose">&times;</button></div>
@@ -802,6 +815,7 @@
             ${textField('Sports Activity', 'sportsActivity', s.sportsActivity)}
             ${textField('Previous School', 'prevSchool', s.prevSchool)}
             ${textField('Admission (OLD/NEW)', 'admission', s.admission)}
+            ${textField('Date of Admission', 'admissionDate', s.admissionDate, 'date')}
           </div>
           <h4 class="sec">Exam Marks</h4>
           <div class="grid3">
@@ -813,6 +827,7 @@
           <div class="fee-head-hdr"><span></span><span>Total</span><span>Paid</span></div>
           ${feeInputs}
           ${transportGrid}
+          ${subGrids}
           <p class="muted" style="font-size:12px;margin-top:8px">Editing “Paid” here adjusts the opening amount directly (no receipt is generated). Use <b>Receive Payment</b> for normal collections.</p>
         </div>
         <div class="modal-foot"><button class="btn" id="edCancel">Cancel</button><button class="btn primary" id="edSave">Save changes</button></div>
@@ -830,13 +845,13 @@
     $('#edSave', root).onclick = async () => {
       s.photo = photo;
       ['name', 'grade', 'classTeacher', 'father', 'mother', 'contact', 'location', 'dropLocation',
-        'transportType', 'vehicle', 'religion', 'sportsActivity', 'prevSchool', 'admission'].forEach(f => {
+        'transportType', 'vehicle', 'religion', 'sportsActivity', 'prevSchool', 'admission', 'admissionDate'].forEach(f => {
         const el = $(`[data-f="${f}"]`, root); if (el) s[f] = el.value.trim();
       });
       s.marks = s.marks || {};
       ['english', 'maths', 'science'].forEach(m => { const el = $(`[data-f="mk_${m}"]`, root); if (el) s.marks[m] = el.value.trim(); });
       Store.HEAD_ORDER.forEach(k => {
-        if (k === 'transport') return; // handled via the monthly grid below
+        if (k === 'transport' || Store.MULTI_HEADS.indexOf(k) >= 0) return; // handled via their own grids below
         const tt = $(`[data-fee-total="${k}"]`, root), pp = $(`[data-fee-paid="${k}"]`, root);
         if (tt) s.fees[k].total = Number(tt.value) || 0;
         if (pp) s.fees[k].paid = Number(pp.value) || 0;
@@ -847,12 +862,27 @@
         const tt = $(`[data-tr-total="${m.key}"]`, root), pp = $(`[data-tr-paid="${m.key}"]`, root);
         s.transport[m.key] = { total: tt ? Number(tt.value) || 0 : 0, paid: pp ? Number(pp.value) || 0 : 0 };
       });
+      // event & extra-curricular sub-item grids
+      Store.ensureSubs(s);
+      Store.MULTI_HEADS.forEach(k => {
+        if (Store.HEAD_ORDER.indexOf(k) < 0) return;
+        Store.subItems(k).forEach(it => {
+          const tt = $(`[data-sub-total="${k}::${it.key}"]`, root), pp = $(`[data-sub-paid="${k}::${it.key}"]`, root);
+          s.subs[k][it.key] = { total: tt ? Number(tt.value) || 0 : 0, paid: pp ? Number(pp.value) || 0 : 0 };
+        });
+      });
       await Store.saveStudent(s);
       close(); U.toast('Saved', 'success'); studentDetail(id);
     };
+    $$('[data-editaddsub]', root).forEach(b => b.onclick = async () => {
+      const name = prompt('Add a new ' + (Store.HEAD_LABELS[b.dataset.editaddsub] || 'item') + ':');
+      if (!name || !name.trim()) return;
+      try { await Store.addSubItem(b.dataset.editaddsub, name.trim()); close(); openEditModal(id); }
+      catch (e) { U.toast(e.message, 'error'); }
+    });
   }
-  function textField(label, key, val) {
-    return `<div class="field"><label>${U.esc(label)}</label><input data-f="${key}" value="${U.esc(val == null ? '' : val)}"/></div>`;
+  function textField(label, key, val, type) {
+    return `<div class="field"><label>${U.esc(label)}</label><input ${type ? 'type="' + type + '" ' : ''}data-f="${key}" value="${U.esc(val == null ? '' : val)}"/></div>`;
   }
 
   /* -------------------------------------------------- Payment modal */
@@ -866,8 +896,9 @@
         <input type="checkbox" class="fh-chk" data-key="${o.key}" ${o.due ? 'checked' : ''}/>
         <div><div class="fh-label">${U.esc(o.label)}</div><div class="muted" style="font-size:11px">${o.sub}</div></div>
         <div class="fh-bal">Bal ${U.inr(o.balance)}</div>
-        <input type="number" class="fh-amt" data-key="${o.key}" data-head="${o.head}"${o.month ? ` data-month="${o.month}"` : ''} min="0" step="1" value="${o.due ? Math.max(0, o.balance) : 0}" ${o.due ? '' : 'disabled'}/>
+        <input type="number" class="fh-amt" data-key="${o.key}" data-head="${o.head}"${o.month ? ` data-month="${o.month}"` : ''}${o.subKey ? ` data-sub="${o.subKey}"` : ''} min="0" step="1" value="${o.due ? Math.max(0, o.balance) : 0}" ${o.due ? '' : 'disabled'}/>
       </div>`;
+    const groupEmoji = { event: '🎉', extra_curricular: '🎨' };
     const rows = Store.HEAD_ORDER.map(k => {
       const B = Store.BUSINESSES[Store.businessOfHead(k)];
       if (k === 'transport') {
@@ -880,6 +911,16 @@
           return feeRowHtml({ key: 'transport::' + m.key, head: 'transport', month: m.key, label: 'Transport — ' + m.label, sub: B.name + ' · ' + status, balance: m.balance, due });
         }).join('');
         return `<div class="fee-group"><div class="fee-group-hd">🚌 Transport Fees — Monthly <span class="muted">(tick the month(s) to collect)</span></div>${monthRows}</div>`;
+      }
+      if (Store.MULTI_HEADS.indexOf(k) >= 0) {
+        // event / extra-curricular — one selectable row per named item
+        const label = Store.HEAD_LABELS[k];
+        const itemRows = Store.subBreakdown(s, k).map(it => {
+          const due = it.balance > 0;
+          const status = it.total > 0 ? `paid ${U.inr(it.paid)}/${U.inr(it.total)}` : 'not set — tick to add';
+          return feeRowHtml({ key: k + '::' + it.key, head: k, subKey: it.key, label: label + ' — ' + it.label, sub: B.name + ' · ' + status, balance: it.balance, due });
+        }).join('');
+        return `<div class="fee-group"><div class="fee-group-hd">${groupEmoji[k] || ''} ${U.esc(label)} <span class="muted">(pick the item to collect)</span> <button class="btn sm" data-addsub="${k}" style="margin-left:auto">＋ Add</button></div>${itemRows}</div>`;
       }
       const h = s.fees[k]; const due = h.balance > 0;
       const status = h.total > 0 ? `Paid ${U.inr(h.paid)} of ${U.inr(h.total)}` : 'Not applied — tick to add & collect';
@@ -912,11 +953,18 @@
     recalc();
     $('#payClose', root).onclick = close; $('#payCancel', root).onclick = close;
     $('#payBackdrop', root).onclick = e => { if (e.target.id === 'payBackdrop') close(); };
+    $$('[data-addsub]', root).forEach(b => b.onclick = async () => {
+      if (!Store.isAdmin()) { U.toast('Only admin can add items', 'error'); return; }
+      const name = prompt('Add a new ' + (Store.HEAD_LABELS[b.dataset.addsub] || 'item') + ':');
+      if (!name || !name.trim()) return;
+      try { await Store.addSubItem(b.dataset.addsub, name.trim()); close(); openPaymentModal(studentId); }
+      catch (e) { U.toast(e.message, 'error'); }
+    });
     $('#paySave', root).onclick = async () => {
       const items = [];
       $$('.fh-amt', root).forEach(inp => {
         const chk = $(`.fh-chk[data-key="${inp.dataset.key}"]`, root); const amt = Number(inp.value) || 0;
-        if (chk && chk.checked && amt > 0) { const it = { head: inp.dataset.head, amount: amt }; if (inp.dataset.month) it.month = inp.dataset.month; items.push(it); }
+        if (chk && chk.checked && amt > 0) { const it = { head: inp.dataset.head, amount: amt }; if (inp.dataset.month) it.month = inp.dataset.month; if (inp.dataset.sub) it.sub = inp.dataset.sub; items.push(it); }
       });
       if (!items.length) { U.toast('Enter at least one amount', 'error'); return; }
       const recs = await Store.addPayment({ studentId, date: $('#payDate', root).value, mode: $('#payMode', root).value, remarks: $('#payRemarks', root).value, items });
@@ -1662,8 +1710,15 @@
       const sched = st.emailConfigured
         ? ('emails <b>' + U.esc(st.to) + '</b> every <b>' + days[st.day] + ' ' + String(st.hour).padStart(2, '0') + ':00</b>')
         : ('<span class="badge amber">email not configured</span> — set SMTP_* env vars to auto-email <b>' + U.esc(st.to) + '</b>');
-      box.innerHTML = `<p class="muted" style="margin:0 0 10px">Data is shared across all devices. Weekly Excel backup ${sched}. Last sent: <b>${st.lastBackupAt ? U.fmtDate(st.lastBackupAt.slice(0, 10)) : 'never'}</b>.</p>
-        <div class="flex gap wrap">
+      const persistent = st.dataDir && (st.dataDir === '/data' || !/[\\/]\.data$/.test(st.dataDir));
+      const storeLine = st.dataDir != null
+        ? `<div class="srv-store"><b>Server storage:</b> <code>${U.esc(st.dataDir)}</code> ${persistent ? '<span class="badge green">volume / persistent</span>' : '<span class="badge red">temporary — mount a volume at /data</span>'}
+             &nbsp;·&nbsp; data version <b>${st.version != null ? st.version : '?'}</b> · ${st.students != null ? st.students : '?'} students · ${st.payments != null ? st.payments : '?'} payments${st.bootAt ? ' · server started ' + new Date(st.bootAt).toLocaleString() : ''}
+             <div class="muted" style="font-size:11px;margin-top:4px">To confirm data survives restarts: note the <b>data version</b>, restart the service in Railway, reload this page — the version should keep growing, not reset to a low number.</div></div>`
+        : '';
+      box.innerHTML = `<p class="muted" style="margin:0 0 8px">Data is shared across all devices. Weekly Excel backup ${sched}. Last sent: <b>${st.lastBackupAt ? U.fmtDate(st.lastBackupAt.slice(0, 10)) : 'never'}</b>.</p>
+        ${storeLine}
+        <div class="flex gap wrap mt">
           <a class="btn primary" href="api/backup.xlsx">⬇ Download Excel (all data + dashboard)</a>
           <button class="btn ${st.emailConfigured ? '' : 'hidden'}" id="emailNow">✉️ Email backup now</button>
         </div>`;
@@ -1990,44 +2045,73 @@
       <line x1="${padL}" y1="${H - padB}" x2="${W - padR}" y2="${H - padB}" stroke="#cbd5e1"/>${labels}</svg>`;
   }
 
-  function academics() {
-    const students = Store.students;
-    const grades = Store.gradeList();
-    const withReport = students.filter(hasReport);
-    const today = U.todayISO();
+  /* ---- academic analytics helpers ---- */
+  const GRADE_NUM = { EX: 95, GD: 82, SA: 67, NI: 45 };
+  // numeric value of a stored cell (numeric mark, or a grade code mapped to a number)
+  function markNum(v) { if (v == null || v === '') return null; if (/^\d+(\.\d+)?$/.test(String(v))) return Number(v); return GRADE_NUM[String(v)] != null ? GRADE_NUM[String(v)] : null; }
+  // per-class report-card stats
+  function classAcademics(grade) {
+    const inG = Store.students.filter(s => s.grade === grade);
+    const done = inG.filter(hasReport).length;
+    let sum = 0, n = 0; const dist = { EX: 0, GD: 0, SA: 0, NI: 0 };
+    inG.forEach(s => { const m = (s.report && s.report.marks) || {}; Object.keys(m).forEach(k => Object.keys(m[k]).forEach(a => { const num = markNum(m[k][a]); if (num != null) { sum += num; n++; } const g = cellGrade(m[k][a]); if (dist[g] != null) dist[g]++; })); });
+    return { grade, students: inG.length, done, avg: n ? Math.round(sum / n) : null, dist };
+  }
+  // average marks for a class: one row per subject/skill, columns = assessments
+  function subjectAverages(grade) {
+    const inG = Store.students.filter(s => s.grade === grade);
+    const A = Store.REPORT.ASSESSMENTS;
+    return reportKeysFor(grade).map(r => {
+      const cells = A.map(a => { let sum = 0, n = 0; inG.forEach(s => { const m = (s.report && s.report.marks) || {}; const num = markNum((m[r.key] || {})[a.key]); if (num != null) { sum += num; n++; } }); return n ? Math.round(sum / n) : null; });
+      const valid = cells.filter(x => x != null); const avg = valid.length ? Math.round(valid.reduce((x, y) => x + y, 0) / valid.length) : null;
+      return { label: r.label, group: r.group, cells, avg };
+    });
+  }
+  // one student's exam-by-exam record + overall average per assessment
+  function studentExam(s) {
+    const A = Store.REPORT.ASSESSMENTS; const m = (s.report && s.report.marks) || {};
+    const rowData = reportKeysFor(s.grade).map(r => ({ label: r.label, group: r.group, cells: A.map(a => { const v = (m[r.key] || {})[a.key]; return { raw: v, num: markNum(v) }; }) }));
+    const perAssess = A.map((a, i) => { let sum = 0, n = 0; rowData.forEach(rd => { const c = rd.cells[i]; if (c.num != null) { sum += c.num; n++; } }); return n ? Math.round(sum / n) : null; });
+    return { rowData, perAssess };
+  }
 
-    // grade-scale distribution across all entered marks
+  let acadState = { tab: 'overview', grade: '', studentId: '' };
+  function academics(params) {
+    if (params && params.tab) acadState.tab = params.tab;
+    const grades = Store.gradeList();
+    const tabs = [['overview', 'Overview'], ['classcards', 'Class Report Cards'], ['subjects', 'Subject Averages'], ['compare', 'Exam Comparison']];
+    const tabBar = `<div class="subtabs">${tabs.map(t => `<button class="subtab ${acadState.tab === t[0] ? 'active' : ''}" data-tab="${t[0]}">${U.esc(t[1])}</button>`).join('')}</div>`;
+    let body = '';
+    if (acadState.tab === 'classcards') body = acadClassCards(grades);
+    else if (acadState.tab === 'subjects') body = acadSubjects(grades);
+    else if (acadState.tab === 'compare') body = acadCompare(grades);
+    else body = acadOverview(grades);
+
+    view().innerHTML = `
+      <div class="page-head"><div><h1>Academics</h1><p>Principal report — report cards &amp; attendance</p></div>
+        <div class="flex gap"><a class="btn" href="#/attendance">📝 Attendance</a><a class="btn" href="#/marks">📚 Report Cards</a></div></div>
+      ${tabBar}
+      <div id="acadBody">${body}</div>`;
+    $$('.subtab').forEach(b => b.onclick = () => { acadState.tab = b.dataset.tab; academics(); });
+    const g = $('#acadGrade'); if (g) g.onchange = e => { acadState.grade = e.target.value; acadState.studentId = ''; academics(); };
+    const st = $('#acadStudent'); if (st) st.onchange = e => { acadState.studentId = e.target.value; academics(); };
+    $$('[data-acadclass]').forEach(tr => tr.onclick = () => { acadState.grade = tr.dataset.acadclass; acadState.tab = 'subjects'; academics(); });
+    bindNav();
+  }
+  // Tab: Overview (KPIs, distribution, attendance trend, completion, absentees)
+  function acadOverview(grades) {
+    const students = Store.students; const withReport = students.filter(hasReport); const today = U.todayISO();
     const scaleCount = { EX: 0, GD: 0, SA: 0, NI: 0 };
     students.forEach(s => { const m = (s.report && s.report.marks) || {}; Object.keys(m).forEach(k => Object.keys(m[k]).forEach(a => { const g = cellGrade(m[k][a]); if (scaleCount[g] != null) scaleCount[g]++; })); });
     const totalMarks = scaleCount.EX + scaleCount.GD + scaleCount.SA + scaleCount.NI;
     const segs = Store.REPORT.GRADE_SCALE.map(g => ({ label: g.code, value: scaleCount[g.code], color: GRADE_COLORS[g.code] }));
-
-    // attendance today
     const day = Store.getAttendance(today);
     let present = 0, absent = 0; students.forEach(s => { if (day[s.id] === 'P') present++; else if (day[s.id] === 'A') absent++; });
-    const marked = present + absent;
-    const presentPct = marked ? Math.round(present / marked * 100) : 0;
-
-    // 7-day attendance trend
-    const days = lastDates(7).map(d => {
-      const dd = Store.getAttendance(d); let p = 0, a = 0;
-      students.forEach(s => { if (dd[s.id] === 'P') p++; else if (dd[s.id] === 'A') a++; });
-      return { label: d.slice(5), value: (p + a) ? Math.round(p / (p + a) * 100) : null };
-    });
-
-    // per-grade report completion
-    const gradeBars = grades.map(g => {
-      const inG = students.filter(s => s.grade === g);
-      const done = inG.filter(hasReport).length;
-      return { label: g, value: inG.length ? Math.round(done / inG.length * 100) : 0, color: '#2563eb', sub: done + '/' + inG.length };
-    });
-
-    // per-grade absentees today
+    const marked = present + absent; const presentPct = marked ? Math.round(present / marked * 100) : 0;
+    const days = lastDates(7).map(d => { const dd = Store.getAttendance(d); let p = 0, a = 0; students.forEach(s => { if (dd[s.id] === 'P') p++; else if (dd[s.id] === 'A') a++; }); return { label: d.slice(5), value: (p + a) ? Math.round(p / (p + a) * 100) : null }; });
+    const gradeBars = grades.map(g => { const inG = students.filter(s => s.grade === g); const done = inG.filter(hasReport).length; return { label: g, value: inG.length ? Math.round(done / inG.length * 100) : 0, color: '#2563eb', sub: done + '/' + inG.length }; });
     const absToday = Store.absenteesOn(today);
-
-    view().innerHTML = `
-      <div class="page-head"><div><h1>Academics Dashboard</h1><p>Report cards &amp; attendance overview — ${U.esc(Store.meta.school || 'AKB School')}</p></div>
-        <div class="flex gap"><a class="btn" href="#/attendance">📝 Attendance</a><a class="btn" href="#/marks">📚 Report Cards</a></div></div>
+    return `
       <div class="cards">
         ${kpi('Students', students.length, { accent: 'blue' })}
         ${kpi('Report cards started', withReport.length, { accent: 'green', sub: (students.length ? Math.round(withReport.length / students.length * 100) : 0) + '% of students' })}
@@ -2041,15 +2125,116 @@
           <div class="panel-body pad">${lineChart(days)}</div></div>
       </div>
       <div class="panel"><div class="panel-head"><h2>Report Card Completion by Class</h2><span class="muted">% of students entered</span></div>
-        <div class="panel-body pad">${gradeBars.length ? hbars(gradeBars, { pct: true }) : '<div class="empty">No classes yet.</div>'}</div></div>
-      <div class="panel"><div class="panel-head"><h2>Absentees Today</h2><span class="muted">${U.fmtDate(today)}</span></div>
-        <div class="table-scroll"><table><thead><tr><th>Class</th><th>Student</th><th>Parent mobile</th><th class="t-right">Notify</th></tr></thead>
-        <tbody>${absToday.length ? absToday.sort((a, b) => String(a.grade).localeCompare(String(b.grade))).map(s => `<tr>
-          <td>${U.esc(s.grade || '—')}</td><td><b>${U.esc(s.name)}</b></td><td>${U.esc(s.contact || '—')}</td>
-          <td class="t-right">${s.contact ? `<a class="btn sm wa" target="_blank" rel="noopener" href="${U.waLink(s.contact, absentText(s, today))}">💬</a>` : ''}</td></tr>`).join('')
-        : '<tr><td colspan="4" class="empty">No absentees recorded today. 🎉</td></tr>'}</tbody></table></div></div>`;
+        <div class="panel-body pad">${gradeBars.length ? hbars(gradeBars, { pct: true }) : '<div class="empty">No classes yet.</div>'}</div></div>`;
+  }
+  // Tab 1: Overall report card by class
+  function acadClassCards(grades) {
+    const rows = grades.map(classAcademics);
+    const body = rows.map(c => `<tr class="clickable" data-acadclass="${U.esc(c.grade)}">
+      <td><b>${U.esc(c.grade)}</b></td>
+      <td class="num">${c.students}</td>
+      <td class="num">${c.done}/${c.students}</td>
+      <td class="num" style="font-weight:700;color:${c.avg != null ? GRADE_COLORS[gradeFromMark(c.avg)] : 'var(--muted)'}">${c.avg != null ? c.avg + '%' : '—'}</td>
+      <td class="num" style="color:${GRADE_COLORS.EX}">${c.dist.EX}</td><td class="num" style="color:${GRADE_COLORS.GD}">${c.dist.GD}</td>
+      <td class="num" style="color:${GRADE_COLORS.SA}">${c.dist.SA}</td><td class="num" style="color:${GRADE_COLORS.NI}">${c.dist.NI}</td></tr>`).join('')
+      || '<tr><td colspan="8" class="empty">No classes.</td></tr>';
+    return `<div class="panel"><div class="panel-head"><h2>Overall Report Card — by Class</h2><span class="muted">click a class for its subject averages</span></div>
+      <div class="table-scroll"><table><thead><tr><th>Class</th><th class="t-right">Students</th><th class="t-right">Reports</th><th class="t-right">Avg %</th><th class="t-right">EX</th><th class="t-right">GD</th><th class="t-right">SA</th><th class="t-right">NI</th></tr></thead>
+      <tbody>${body}</tbody></table></div></div>`;
+  }
+  function acadGradeSelect(grades) {
+    return `<label class="fld"><span>Class</span><select id="acadGrade">${grades.map(x => `<option${x === acadState.grade ? ' selected' : ''}>${U.esc(x)}</option>`).join('')}</select></label>`;
+  }
+  // Tab 2: Subject averages for a selected class
+  function acadSubjects(grades) {
+    if (!grades.length) return `<div class="panel"><div class="panel-body pad"><div class="empty">No classes.</div></div></div>`;
+    if (!acadState.grade || grades.indexOf(acadState.grade) < 0) acadState.grade = grades[0];
+    const g = acadState.grade, kg = Store.isKG(g), A = Store.REPORT.ASSESSMENTS;
+    const rows = subjectAverages(g); const anyData = rows.some(r => r.cells.some(c => c != null));
+    let body = '', lastGroup = null;
+    rows.forEach(r => {
+      if (kg && r.group !== lastGroup) { body += `<tr class="grp-row"><td colspan="${A.length + 2}">${U.esc(r.group)}</td></tr>`; lastGroup = r.group; }
+      body += `<tr><td>${U.esc(r.label)}</td>${r.cells.map(c => `<td class="num" style="color:${c != null ? GRADE_COLORS[gradeFromMark(c)] : 'var(--muted)'}">${c != null ? c : '—'}</td>`).join('')}<td class="num" style="font-weight:700;color:${r.avg != null ? GRADE_COLORS[gradeFromMark(r.avg)] : 'var(--muted)'}">${r.avg != null ? r.avg : '—'}</td></tr>`;
+    });
+    return `<div class="panel"><div class="panel-head"><div class="toolbar">${acadGradeSelect(grades)}</div><span class="muted">class average marks (0–100), coloured by grade</span></div>
+      <div class="table-scroll"><table><thead><tr><th>${kg ? 'Skill / Ability' : 'Subject'}</th>${A.map(a => `<th class="t-right">${U.esc(a.label)}</th>`).join('')}<th class="t-right">Avg</th></tr></thead>
+      <tbody>${anyData ? body : `<tr><td colspan="${A.length + 2}" class="empty">No marks entered for ${U.esc(g)} yet.</td></tr>`}</tbody></table></div></div>`;
+  }
+  // Tab 3: Per-student exam comparison (improvement) within a class
+  function acadCompare(grades) {
+    if (!grades.length) return `<div class="panel"><div class="panel-body pad"><div class="empty">No classes.</div></div></div>`;
+    if (!acadState.grade || grades.indexOf(acadState.grade) < 0) acadState.grade = grades[0];
+    const g = acadState.grade, kg = Store.isKG(g), A = Store.REPORT.ASSESSMENTS;
+    const roster = Store.students.filter(s => s.grade === g).sort((a, b) => String(a.name).localeCompare(String(b.name)));
+    if (!acadState.studentId || !roster.find(s => s.id === acadState.studentId)) acadState.studentId = roster[0] ? roster[0].id : '';
+    const s = roster.find(x => x.id === acadState.studentId);
+    const ssel = `<label class="fld"><span>Student</span><select id="acadStudent">${roster.map(x => `<option value="${U.esc(x.id)}"${x.id === acadState.studentId ? ' selected' : ''}>${U.esc(x.name)}</option>`).join('') || '<option>—</option>'}</select></label>`;
+    let content = '<div class="panel-body pad"><div class="empty">No students in this class.</div></div>';
+    if (s) {
+      const ex = studentExam(s); let body = '', lastGroup = null;
+      ex.rowData.forEach(rd => {
+        if (kg && rd.group !== lastGroup) { body += `<tr class="grp-row"><td colspan="${A.length + 2}">${U.esc(rd.group)}</td></tr>`; lastGroup = rd.group; }
+        const nums = rd.cells.map(c => c.num).filter(x => x != null);
+        const delta = nums.length >= 2 ? nums[nums.length - 1] - nums[0] : null;
+        const trend = delta == null ? '—' : (delta > 0 ? `<span style="color:var(--green)">▲ +${delta}</span>` : (delta < 0 ? `<span style="color:var(--red)">▼ ${delta}</span>` : '▬ 0'));
+        body += `<tr><td>${U.esc(rd.label)}</td>${rd.cells.map(c => `<td class="num" style="color:${c.num != null ? GRADE_COLORS[gradeFromMark(c.num)] : 'var(--muted)'}">${c.raw != null && c.raw !== '' ? U.esc(String(c.raw)) : '—'}</td>`).join('')}<td class="num">${trend}</td></tr>`;
+      });
+      const hasAny = ex.perAssess.some(x => x != null);
+      content = `<div class="table-scroll"><table><thead><tr><th>${kg ? 'Skill / Ability' : 'Subject'}</th>${A.map(a => `<th class="t-right">${U.esc(a.label)}</th>`).join('')}<th class="t-right">Trend</th></tr></thead>
+        <tbody>${body}</tbody></table></div>
+        <div class="panel-body pad"><h3 style="margin:0 0 6px;font-size:13px">Overall average across exams — is ${U.esc(s.name.split(' ')[0])} improving?</h3>${hasAny ? lineChart(A.map((a, i) => ({ label: a.label, value: ex.perAssess[i] }))) : '<div class="empty">No marks entered yet.</div>'}</div>`;
+    }
+    return `<div class="panel"><div class="panel-head"><div class="toolbar">${acadGradeSelect(grades)}${ssel}</div><span class="muted">exam-by-exam with improvement trend</span></div>${content}</div>`;
+  }
+
+  /* -------------------------------------------------- Attendance Report (admin) */
+  function fmtMonth(ym) { const p = String(ym).split('-'); const names = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']; return (names[(+p[1] || 1) - 1] || '') + ' ' + p[0]; }
+  let attRepState = { month: '', grade: '' };
+  function attReport() {
+    const att = Store.meta.attendance || {};
+    const students = Store.students, grades = Store.gradeList();
+    if (!attRepState.month) { const ms = Array.from(new Set(Object.keys(att).map(d => d.slice(0, 7)))).sort(); attRepState.month = ms[ms.length - 1] || U.todayISO().slice(0, 7); }
+    const ym = attRepState.month;
+    const dates = Object.keys(att).filter(d => d.slice(0, 7) === ym).sort();
+    const bandColor = p => p >= 90 ? '#16a34a' : (p >= 75 ? '#2563eb' : (p >= 60 ? '#d97706' : '#dc2626'));
+
+    let P = 0, Aa = 0; dates.forEach(d => { const day = att[d] || {}; students.forEach(s => { const v = day[s.id]; if (v === 'P') P++; else if (v === 'A') Aa++; }); });
+    const marked = P + Aa, pct = marked ? Math.round(P / marked * 100) : 0;
+
+    const classRows = grades.map(g => {
+      const inG = students.filter(s => s.grade === g); let p = 0, a = 0;
+      dates.forEach(d => { const day = att[d] || {}; inG.forEach(s => { const v = day[s.id]; if (v === 'P') p++; else if (v === 'A') a++; }); });
+      const m = p + a; return { grade: g, students: inG.length, p, a, pct: m ? Math.round(p / m * 100) : null };
+    });
+    const classBars = classRows.filter(c => c.pct != null).map(c => ({ label: c.grade, value: c.pct, color: bandColor(c.pct), sub: c.p + 'P/' + c.a + 'A' }));
+
+    if (!attRepState.grade || grades.indexOf(attRepState.grade) < 0) attRepState.grade = grades[0] || '';
+    const roster = students.filter(s => s.grade === attRepState.grade).sort((a, b) => String(a.name).localeCompare(String(b.name)));
+    const stuRows = roster.map(s => { let p = 0, a = 0; dates.forEach(d => { const v = (att[d] || {})[s.id]; if (v === 'P') p++; else if (v === 'A') a++; }); const m = p + a; return { s, p, a, pct: m ? Math.round(p / m * 100) : null }; });
+
+    view().innerHTML = `
+      <div class="page-head"><div><h1>Attendance Report</h1><p>Monthly attendance — class-wise &amp; student-wise</p></div>
+        <label class="fld"><span>Month</span><input type="month" id="attMonth" value="${ym}" max="${U.todayISO().slice(0, 7)}"/></label></div>
+      <div class="cards">
+        ${kpi('School days recorded', dates.length, { accent: 'blue', sub: fmtMonth(ym) })}
+        ${kpi('Avg attendance', pct + '%', { accent: pct >= 75 ? 'green' : 'amber' })}
+        ${kpi('Total present', P, { accent: 'green' })}
+        ${kpi('Total absent', Aa, { accent: Aa ? 'red' : 'green' })}
+      </div>
+      <div class="panel"><div class="panel-head"><h2>Attendance % by Class</h2><span class="muted">${fmtMonth(ym)}</span></div>
+        <div class="panel-body pad">${classBars.length ? hbars(classBars, { pct: true }) : '<div class="empty">No attendance recorded for this month.</div>'}</div></div>
+      <div class="panel"><div class="panel-head"><h2>Class-wise Summary</h2><span class="muted">click a class for student details</span></div>
+        <div class="table-scroll"><table><thead><tr><th>Class</th><th class="t-right">Students</th><th class="t-right">Present</th><th class="t-right">Absent</th><th class="t-right">Attendance %</th></tr></thead>
+        <tbody>${classRows.map(c => `<tr class="clickable" data-attclass="${U.esc(c.grade)}"><td><b>${U.esc(c.grade)}</b></td><td class="num">${c.students}</td><td class="num" style="color:var(--green)">${c.p}</td><td class="num" style="color:${c.a ? 'var(--red)' : 'var(--muted)'}">${c.a}</td><td class="num" style="font-weight:700;color:${c.pct == null ? 'var(--muted)' : bandColor(c.pct)}">${c.pct != null ? c.pct + '%' : '—'}</td></tr>`).join('') || '<tr><td colspan="5" class="empty">No data.</td></tr>'}</tbody></table></div></div>
+      <div class="panel"><div class="panel-head"><h2>Student-wise — ${U.esc(attRepState.grade || '')}</h2><div class="toolbar"><label class="fld"><span>Class</span><select id="attRepGrade">${grades.map(x => `<option${x === attRepState.grade ? ' selected' : ''}>${U.esc(x)}</option>`).join('')}</select></label></div></div>
+        <div class="table-scroll"><table><thead><tr><th>Student</th><th class="t-right">Present</th><th class="t-right">Absent</th><th class="t-right">Attendance %</th></tr></thead>
+        <tbody>${stuRows.map(r => `<tr class="clickable" data-id="${U.esc(r.s.id)}"><td><b>${U.esc(r.s.name)}</b><div class="muted" style="font-size:11px">${U.esc(r.s.id)}</div></td><td class="num" style="color:var(--green)">${r.p}</td><td class="num" style="color:${r.a ? 'var(--red)' : 'var(--muted)'}">${r.a}</td><td class="num" style="font-weight:700;color:${r.pct == null ? 'var(--muted)' : (r.pct >= 75 ? 'var(--green)' : 'var(--red)')}">${r.pct != null ? r.pct + '%' : '—'}</td></tr>`).join('') || `<tr><td colspan="4" class="empty">No students / no attendance for this class.</td></tr>`}</tbody></table></div></div>`;
+    $('#attMonth').onchange = e => { attRepState.month = e.target.value || ym; attReport(); };
+    $('#attRepGrade').onchange = e => { attRepState.grade = e.target.value; attReport(); };
+    $$('[data-attclass]').forEach(tr => tr.onclick = () => { attRepState.grade = tr.dataset.attclass; attReport(); const el = document.querySelector('.panel:last-child'); if (el) el.scrollIntoView({ behavior: 'smooth' }); });
+    $$('#view [data-id]').forEach(tr => tr.onclick = () => { location.hash = '#/student/' + encodeURIComponent(tr.dataset.id); });
     bindNav();
   }
 
-  w.Views = { dashboard, students, studentDetail, businessDashboard, collect, collections, reports, attendance, marks, academics, users, data, openPaymentModal, changePassword };
+  w.Views = { dashboard, students, studentDetail, businessDashboard, collect, collections, reports, attendance, attReport, marks, academics, users, data, openPaymentModal, changePassword };
 })(window);
