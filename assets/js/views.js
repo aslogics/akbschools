@@ -484,7 +484,7 @@
       <td class="t-center">${monthStatus(m)}</td></tr>`).join('');
     return `<div class="panel">
       <div class="panel-head"><h2>🚌 Transport Fees — Monthly (Apr → Mar)</h2>
-        <div class="flex gap"><button class="btn sm" id="trPrint">🖨️ Print card</button><button class="btn green sm" id="trCollect">Collect monthly</button></div></div>
+        <div class="flex gap"><button class="btn sm" id="trPrint">🖨️ Print card</button>${Store.canCollect() ? '<button class="btn green sm" id="trCollect">Collect monthly</button>' : ''}</div></div>
       <div class="table-scroll"><table>
         <thead><tr><th>Month</th><th class="t-right">Total</th><th class="t-right">Paid</th><th class="t-right">Balance</th><th class="t-center">Status</th></tr></thead>
         <tbody>${rows}</tbody>
@@ -580,9 +580,10 @@
         </div>
         <div class="flex gap wrap">
           ${remindButtons(s)}
+          ${Store.canCollect() ? `
           <button class="btn" id="editBtn">✏️ Edit</button>
           <button class="btn danger" id="delStudentBtn">🗑 Delete</button>
-          <button class="btn green" id="payBtn">🧾 Receive Payment</button>
+          <button class="btn green" id="payBtn">🧾 Receive Payment</button>` : ''}
         </div>
       </div>
 
@@ -670,8 +671,9 @@
           </div>
         </div>
         <div class="flex gap">
+          ${Store.canCollect() ? `
           <button class="btn" id="editBtn">✏️ Edit</button>
-          <button class="btn green" id="payBtn">🧾 Receive Payment</button>
+          <button class="btn green" id="payBtn">🧾 Receive Payment</button>` : ''}
         </div>
       </div>
       <div class="cards">
@@ -722,7 +724,7 @@
       <td><span class="pill-mode">${U.esc(p.mode)}</span></td>
       ${withAccount ? `<td class="muted" style="font-size:12px">${U.esc(p.businessName || p.entity || '')}</td>` : ''}
       <td class="num" style="color:var(--green);font-weight:600">${U.inr(p.amount)}</td>
-      <td class="t-right"><button class="btn sm" data-print="${p.id}">🖨️</button> <button class="btn sm danger" data-del="${p.id}">✕</button></td></tr>`).join('')
+      <td class="t-right">${Store.canCollect() ? `<button class="btn sm" data-print="${p.id}">🖨️</button> <button class="btn sm danger" data-del="${p.id}">✕</button>` : '<span class="muted">—</span>'}</td></tr>`).join('')
       || `<tr><td colspan="${withAccount ? 7 : 6}" class="empty">No payments recorded in the app for this student.</td></tr>`;
   }
   function bizPayRows(key) {
@@ -732,12 +734,12 @@
       <td>${U.esc(p.studentName)}<div class="muted" style="font-size:11px">${U.esc(p.grade || '')}</div></td>
       <td>${p.items.map(i => U.esc(i.label)).join(', ')}</td><td><span class="pill-mode">${U.esc(p.mode)}</span></td>
       <td class="num" style="color:var(--green);font-weight:600">${U.inr(p.amount)}</td>
-      <td class="t-right"><button class="btn sm" data-print="${p.id}">🖨️</button></td></tr>`).join('')
+      <td class="t-right">${Store.canCollect() ? `<button class="btn sm" data-print="${p.id}">🖨️</button>` : '<span class="muted">—</span>'}</td></tr>`).join('')
       || '<tr><td colspan="7" class="empty">No collections recorded for this business yet.</td></tr>';
   }
   function bindStudentActions(s) {
-    $('#payBtn').onclick = () => openPaymentModal(s.id);
-    $('#editBtn').onclick = () => openEditModal(s.id);
+    const payB = document.getElementById('payBtn'); if (payB) payB.onclick = () => openPaymentModal(s.id);
+    const edB = document.getElementById('editBtn'); if (edB) edB.onclick = () => openEditModal(s.id);
     const del = document.getElementById('delStudentBtn');
     if (del) del.onclick = () => {
       if (!confirm('Delete student "' + s.name + '" (ID ' + s.id + ')?\n\nThis removes the student record. Their past receipts stay in Collections.')) return;
@@ -755,6 +757,7 @@
 
   /* -------------------------------------------------- Edit student modal */
   function openEditModal(id) {
+    if (!Store.canCollect()) { U.toast('Only Account & Administrator can edit students', 'error'); return; }
     const s = Store.getStudent(id); if (!s) return;
     const root = document.getElementById('modalRoot');
     const feeInputs = Store.HEAD_ORDER.filter(k => k !== 'transport' && Store.MULTI_HEADS.indexOf(k) < 0).map(k => {
@@ -887,6 +890,7 @@
 
   /* -------------------------------------------------- Payment modal */
   function openPaymentModal(studentId) {
+    if (!Store.canCollect()) { U.toast('Only Account & Administrator can receive payments', 'error'); return; }
     const s = Store.getStudent(studentId); if (!s) return;
     const root = document.getElementById('modalRoot');
     // show ALL fee categories so staff can collect an ad-hoc fee (e.g. a
@@ -1352,7 +1356,7 @@
         ${heads.map(k => { const bill = (r.s.fees[k] || {}).total || 0; return `<td class="num">${U.inr(bill)}</td>`; }).join('')}
         <td class="num" style="color:var(--green)">${U.inr(bizPaid(r.s))}</td>
         <td class="num" style="color:var(--red);font-weight:700">${U.inr(r.bal)}</td>
-        <td class="t-right">${remindIcon(r.s)}<button class="btn green sm" data-pay="${U.esc(r.s.id)}">Collect</button></td></tr>`).join('')
+        <td class="t-right">${remindIcon(r.s)}${Store.canCollect() ? `<button class="btn green sm" data-pay="${U.esc(r.s.id)}">Collect</button>` : ''}</td></tr>`).join('')
         || `<tr><td colspan="${7 + heads.length}" class="empty">No students pending for ${U.esc(B.name)} 🎉</td></tr>`;
       const sum = rows.reduce((a, r) => a + r.bal, 0);
       $('#bizFoot').innerHTML = `<b>${rows.length}</b> pending students · Outstanding <b style="color:var(--red)">${U.inr(sum)}</b>`;
@@ -1507,7 +1511,7 @@
       <div class="panel"><div class="panel-head"><h2>User Accounts</h2></div><div class="table-scroll"><table>
         <thead><tr><th>User</th><th>Role</th><th>Pages (access)</th><th>Class(es)</th><th class="t-right">Actions</th></tr></thead><tbody>${rows}</tbody></table></div></div>
       <div class="panel"><div class="panel-body pad">
-        <p class="muted" style="margin:0"><b>Access</b> lets you tick exactly which dashboard pages a user can open — set it per person, however you like. <b>Teachers</b> are additionally limited to the class(es) you assign for Attendance &amp; Report Cards. <b>Admin</b> always has every page. <b>Note on security:</b> this login runs in the browser, so it's an access convenience for staff on shared devices — not server‑grade protection. For a public deploy, also set the <code>APP_PASSWORD</code> environment variable.</p>
+        <p class="muted" style="margin:0"><b>Access</b> lets you tick exactly which dashboard pages a user can open — set it per person, however you like. <b>Receive Payment &amp; Collections</b> (collecting money and issuing receipts) are reserved for <b>Account</b> and <b>Administrator</b> only — other roles can view pending students and follow up, but cannot take payments or print receipts. <b>Teachers</b> are additionally limited to the class(es) you assign for Attendance &amp; Report Cards. <b>Admin</b> always has every page. <b>Note on security:</b> this login runs in the browser, so it's an access convenience for staff on shared devices — not server‑grade protection. For a public deploy, also set the <code>APP_PASSWORD</code> environment variable.</p>
       </div></div>`;
     $('#addUser').onclick = () => userModal();
     $$('[data-reset]').forEach(b => b.onclick = () => resetPwModal(b.dataset.reset));
@@ -1528,10 +1532,12 @@
     });
   }
 
-  // checkbox list of dashboard pages → grant to a user
-  function pageCheckboxes(selected) {
+  // checkbox list of dashboard pages → grant to a user. Money pages (Receive
+  // Payment, Collections) are only offered to roles that can collect.
+  function pageCheckboxes(selected, role) {
     const sel = selected || [];
-    return Store.PAGES.map(p =>
+    const list = role ? Store.pageListFor(role) : Store.PAGES;
+    return list.map(p =>
       `<label class="chk-inline"><input type="checkbox" value="${U.esc(p.key)}"${sel.indexOf(p.key) >= 0 ? ' checked' : ''}/> ${p.icon} ${U.esc(p.label)}</label>`
     ).join('');
   }
@@ -1549,7 +1555,7 @@
             <button class="btn sm" id="pNone" type="button">Clear all</button>
             <button class="btn sm" id="pDefault" type="button">Role default</button>
           </div>
-          <div class="chk-grid" id="pPages">${pageCheckboxes(current)}</div>
+          <div class="chk-grid" id="pPages">${pageCheckboxes(current, u.role)}</div>
         </div>
         <div class="modal-foot"><button class="btn" id="pCancel">Cancel</button><button class="btn primary" id="pSave">Save access</button></div>
       </div></div>`;
@@ -1618,7 +1624,7 @@
               <button class="btn sm" id="uNone" type="button">Clear all</button>
               <button class="btn sm" id="uDefault" type="button">Role default</button>
             </div>
-            <div class="chk-grid" id="uPages">${pageCheckboxes(Store.defaultPagesFor(firstRole))}</div></div>
+            <div class="chk-grid" id="uPages">${pageCheckboxes(Store.defaultPagesFor(firstRole), firstRole)}</div></div>
           <div class="field"><label>Password</label><input id="uPass" type="text" placeholder="min 4 characters"/></div>
         </div>
         <div class="modal-foot"><button class="btn" id="uCancel">Cancel</button><button class="btn primary" id="uSave">Create user</button></div>
@@ -1632,7 +1638,9 @@
       // Admin always has all pages → hide the picker; otherwise reset ticks to the role default.
       const isAdmin = rl === 'admin';
       $('#uPagesField', root).classList.toggle('hidden', isAdmin);
-      if (!isAdmin) { const def = Store.defaultPagesFor(rl); $$('#uPages input', root).forEach(c => c.checked = def.indexOf(c.value) >= 0); }
+      // Rebuild the page list for this role (money pages appear only for account),
+      // pre-ticked to the role default.
+      if (!isAdmin) $('#uPages', root).innerHTML = pageCheckboxes(Store.defaultPagesFor(rl), rl);
     };
     $('#uRole', root).onchange = syncRole;
     const setAll = v => $$('#uPages input', root).forEach(c => c.checked = v);

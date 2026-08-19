@@ -127,6 +127,13 @@
     { key: 'data',        label: 'Data & Backup',     icon: '⚙️' }
   ];
   const PAGE_KEYS = PAGES.map(p => p.key);
+  // Money pages: collecting payments / issuing receipts / viewing collections.
+  // Restricted to Account + Administrator only, regardless of page grants.
+  const FINANCIAL_PAGES = ['collect', 'collections'];
+  function roleCanCollect(role) { return role === 'admin' || role === 'account'; }
+  // Pages that may be offered to a role in the access picker (hide money pages
+  // for roles that can never collect).
+  function pageListFor(role) { return PAGES.filter(p => FINANCIAL_PAGES.indexOf(p.key) < 0 || roleCanCollect(role)); }
   const ROLES = [
     { key: 'admin',           label: 'Admin' },
     { key: 'account',         label: 'Account' },
@@ -141,8 +148,8 @@
     admin: PAGE_KEYS.slice(),
     account: ['dashboard', 'students', 'collect', 'collections', 'reports'],
     teacher: ['attendance', 'marks'],
-    akbch_academics: ['dashboard', 'attendance', 'attreport', 'marks', 'academics'],
-    akb_admins: ['dashboard', 'students', 'collect', 'collections', 'reports', 'attendance', 'attreport', 'marks', 'academics']
+    akbch_academics: ['dashboard', 'students', 'attendance', 'attreport', 'marks', 'academics'],
+    akb_admins: ['dashboard', 'students', 'reports', 'attendance', 'attreport', 'marks', 'academics']
   };
   function normRole(role) { return ROLE_KEYS.indexOf(role) >= 0 ? role : 'account'; }
   function defaultPagesFor(role) { return (DEFAULT_PAGES[normRole(role)] || DEFAULT_PAGES.account).slice(); }
@@ -150,8 +157,10 @@
   function effectivePages(u) {
     if (!u) return [];
     if (u.role === 'admin') return PAGE_KEYS.slice();
-    if (Array.isArray(u.pages)) return u.pages.filter(k => PAGE_KEYS.indexOf(k) >= 0);
-    return defaultPagesFor(u.role);
+    let list = Array.isArray(u.pages) ? u.pages.filter(k => PAGE_KEYS.indexOf(k) >= 0) : defaultPagesFor(u.role);
+    // Money pages never apply to a role that can't collect (defence in depth).
+    if (!roleCanCollect(u.role)) list = list.filter(k => FINANCIAL_PAGES.indexOf(k) < 0);
+    return list;
   }
 
   // Rebuild the HEAD_* lookups (in place) from a fee-head config array.
@@ -185,7 +194,7 @@
     ENTITIES, MODES, HEAD_ORDER, HEAD_LABELS, BUSINESS, BUSINESSES, BUSINESS_ORDER, HEAD_BUSINESS,
     SCHOOL_WHATSAPP, SCHOOL_WHATSAPP_DISPLAY, DEFAULT_FEE_HEADS,
     REPORT, isKG, MULTI_HEADS,
-    PAGES, PAGE_KEYS, ROLES, ROLE_LABEL, defaultPagesFor,
+    PAGES, PAGE_KEYS, ROLES, ROLE_LABEL, defaultPagesFor, pageListFor,
 
     serverMode() { return serverMode; },
 
@@ -852,7 +861,11 @@
       const u = username ? this.getUser(username) : (this.currentUser && this.getUser(this.currentUser.username));
       return effectivePages(u || (username ? null : this.currentUser));
     },
+    // Can this user collect payments / issue receipts / see collections?
+    // Account + Administrator only — never teacher / AKBCH Academics / AKB Admins.
+    canCollect() { return roleCanCollect(this.currentUser && this.currentUser.role); },
     canAccess(pageKey) {
+      if (FINANCIAL_PAGES.indexOf(pageKey) >= 0) return this.canCollect();
       if (this.currentUser && this.currentUser.role === 'admin') return true;
       return this.userPages().indexOf(pageKey) >= 0;
     },
