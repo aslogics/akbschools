@@ -1481,8 +1481,14 @@
   }
   function users() {
     const rows = Store.users.map(u => {
+      const isAdmin = u.role === 'admin';
       const isT = u.role === 'teacher';
-      const gr = isT ? (Array.isArray(u.grades) && u.grades.length ? U.esc(u.grades.join(', ')) : '<span style="color:var(--red)">no class assigned</span>') : '<span class="muted">—</span>';
+      const hasGrades = Array.isArray(u.grades) && u.grades.length;
+      // Class scoping applies to any non-admin user. Empty means "all classes"
+      // for most roles, but a teacher with none can't see anything — flag it red.
+      const gr = isAdmin ? '<span class="muted">all classes</span>'
+        : hasGrades ? U.esc(u.grades.join(', '))
+        : (isT ? '<span style="color:var(--red)">no class assigned</span>' : '<span class="muted">all classes</span>');
       return `<tr>
       <td><b>${U.esc(u.name || u.username)}</b><div class="muted" style="font-size:11px">@${U.esc(u.username)}</div></td>
       <td>${roleBadge(u.role)}${u.mustChange ? ' <span class="badge amber">default pwd</span>' : ''}</td>
@@ -1490,8 +1496,8 @@
       <td>${gr}</td>
       <td class="t-right">
         <select class="sel-inline" data-roleselect="${U.esc(u.username)}">${roleOptions(u.role)}</select>
-        ${u.role === 'admin' ? '' : `<button class="btn sm" data-pages="${U.esc(u.username)}">Access</button>`}
-        ${isT ? `<button class="btn sm" data-grades="${U.esc(u.username)}">Classes</button>` : ''}
+        ${isAdmin ? '' : `<button class="btn sm" data-pages="${U.esc(u.username)}">Access</button>`}
+        ${isAdmin ? '' : `<button class="btn sm" data-grades="${U.esc(u.username)}">Classes</button>`}
         <button class="btn sm" data-reset="${U.esc(u.username)}">Reset pwd</button>
         <button class="btn sm danger" data-del="${U.esc(u.username)}">Delete</button>
       </td></tr>`;
@@ -1590,7 +1596,7 @@
       <div class="modal-backdrop" id="gBackdrop"><div class="modal">
         <div class="modal-head"><h3>Assign class(es) — ${U.esc(u.name || u.username)}</h3><button class="x-close" id="gClose">&times;</button></div>
         <div class="modal-body">
-          <p class="muted">Tick the class(es) this teacher is responsible for. They'll see attendance &amp; report cards for these students only.</p>
+          <p class="muted">Tick the class(es) this user is responsible for — they'll see attendance &amp; report cards for these students only. Leave all unticked to allow every class.</p>
           <div class="chk-grid" id="gGrades">${gradeCheckboxes(u.grades)}</div>
         </div>
         <div class="modal-foot"><button class="btn" id="gCancel">Cancel</button><button class="btn primary" id="gSave">Save classes</button></div>
@@ -1627,7 +1633,8 @@
           <div class="field"><label>Full name</label><input id="uName" placeholder="e.g. Mrs. Priya (Grade 3 teacher)"/></div>
           <div class="field"><label>Username</label><input id="uUser" placeholder="e.g. teacher_g3"/></div>
           <div class="field"><label>Role</label><select id="uRole">${roleOptions(firstRole)}</select></div>
-          <div class="field hidden" id="uGradesField"><label>Class(es) this teacher handles</label>
+          <div class="field hidden" id="uGradesField"><label>Class(es) this user handles
+              <span class="muted" style="font-weight:400">— leave all unticked to allow every class</span></label>
             <div class="chk-grid" id="uGrades">${gradeCheckboxes([])}</div></div>
           <div class="field" id="uPagesField"><label>Pages this user can access
               <span class="muted" style="font-weight:400">— tick as you wish</span></label>
@@ -1646,9 +1653,10 @@
     $('#uBackdrop', root).onclick = e => { if (e.target.id === 'uBackdrop') close(); };
     const syncRole = () => {
       const rl = $('#uRole', root).value;
-      $('#uGradesField', root).classList.toggle('hidden', rl !== 'teacher');
       // Admin always has all pages → hide the picker; otherwise reset ticks to the role default.
       const isAdmin = rl === 'admin';
+      // Any non-admin user can be scoped to specific class(es).
+      $('#uGradesField', root).classList.toggle('hidden', isAdmin);
       $('#uPagesField', root).classList.toggle('hidden', isAdmin);
       // Rebuild the page list for this role (money pages appear only for account),
       // pre-ticked to the role default.
@@ -1662,7 +1670,7 @@
     $('#uSave', root).onclick = async () => {
       try {
         const role = $('#uRole', root).value;
-        const grades = role === 'teacher' ? $$('#uGrades input:checked', root).map(c => c.value) : undefined;
+        const grades = role === 'admin' ? undefined : $$('#uGrades input:checked', root).map(c => c.value);
         const pages = role === 'admin' ? undefined : $$('#uPages input:checked', root).map(c => c.value);
         await Store.addUser({ name: $('#uName', root).value, username: $('#uUser', root).value, role, password: $('#uPass', root).value, grades, pages });
         close(); afterUserWrite('User created'); users();
@@ -1836,12 +1844,14 @@
   // (this also reflects class re-assignments made while the teacher is logged in).
   function myGrades() {
     const cu = Store.currentUser; if (!cu) return [];
-    // Only teachers are scoped to assigned classes; every other role that can
-    // reach attendance/report cards (admin, account, AKBCH Academics, AKB Admins)
-    // sees all classes.
-    if (cu.role !== 'teacher') return Store.gradeList();
+    // Admin always sees every class. Any other user is scoped to the class(es)
+    // assigned to them (Users → Classes); if none are assigned they see all — so
+    // scoping is opt-in per user, "as per my wish", for teachers and the AKBCH
+    // Academics / AKB Admins roles alike.
+    if (cu.role === 'admin') return Store.gradeList();
     const u = Store.getUser(cu.username) || cu;
-    return Array.isArray(u.grades) ? u.grades.filter(Boolean) : [];
+    const g = Array.isArray(u.grades) ? u.grades.filter(Boolean) : [];
+    return g.length ? g : Store.gradeList();
   }
   const GRADE_COLORS = { EX: '#16a34a', GD: '#2563eb', SA: '#d97706', NI: '#dc2626' };
   // Grades 1-9 store numeric marks (0-100); KG stores skill grade codes.
@@ -1886,6 +1896,8 @@
     const roster = Store.students.filter(s => s.grade === attState.grade)
       .sort((a, b) => String(a.name).localeCompare(String(b.name)));
     const day = Store.getAttendance(attState.date);
+    const holiday = Store.isHoliday(attState.date, attState.grade);
+    const wholeHoliday = Store.holidaysOn(attState.date).indexOf(Store.HOLIDAY_ALL) >= 0;
     let present = 0, absent = 0, unmarked = 0;
     roster.forEach(s => { const v = day[s.id]; if (v === 'P') present++; else if (v === 'A') absent++; else unmarked++; });
 
@@ -1905,18 +1917,22 @@
         <td class="t-right">${wa}</td></tr>`;
     }).join('') || '<tr><td colspan="3" class="empty">No students in this class.</td></tr>';
 
-    view().innerHTML = `
-      <div class="page-head">
-        <div><h1>Attendance</h1><p>Mark each student, then WhatsApp the parents of absentees</p></div>
-      </div>
-      <div class="panel"><div class="panel-head">
-        <div class="toolbar">
-          <label class="fld"><span>Date</span><input type="date" id="attDate" value="${attState.date}" max="${U.todayISO()}"/></label>
-          <label class="fld"><span>Class</span><select id="attGrade">${gradeOpts}</select></label>
-          <button class="btn" id="attAllPresent">✔ Mark all present</button>
+    // When the class (or whole school) is on holiday, show a holiday banner
+    // instead of the present/absent roster — no attendance is taken.
+    const holidayBody = `
+      <div class="panel-body pad">
+        <div class="holiday-banner">
+          <div class="holiday-emoji">🏖️</div>
+          <div>
+            <h2 style="margin:0 0 4px">Holiday — no school${wholeHoliday ? ' (all classes)' : ' for ' + U.esc(attState.grade)}</h2>
+            <p class="muted" style="margin:0">No attendance is taken for ${wholeHoliday ? 'any class' : U.esc(attState.grade)} on ${U.fmtDate(attState.date)}. This day is left out of attendance reports.</p>
+          </div>
+          <button class="btn ${wholeHoliday ? '' : 'danger'}" id="attUnHoliday"${wholeHoliday ? ' disabled title="Marked as a whole-school holiday — remove it with “Undo holiday (all classes)”."' : ''}>Undo holiday</button>
         </div>
-        <span class="muted">${U.fmtDate(attState.date)}</span>
-      </div>
+        ${wholeHoliday ? '<div style="margin-top:10px"><button class="btn sm danger" id="attUnHolidayAll">Undo holiday (all classes)</button></div>' : ''}
+      </div>`;
+
+    const normalBody = `
       <div class="cards" style="margin:12px">
         ${kpi('Students', roster.length, { accent: 'blue' })}
         ${kpi('Present', present, { accent: 'green' })}
@@ -1925,12 +1941,32 @@
       </div>
       <div class="table-scroll"><table>
         <thead><tr><th>Student</th><th class="t-center">Attendance</th><th class="t-right">Absent action</th></tr></thead>
-        <tbody>${rows}</tbody></table></div></div>
-      ${isAdmin ? adminAbsenteePanel(attState.date) : ''}`;
+        <tbody>${rows}</tbody></table></div>`;
+
+    view().innerHTML = `
+      <div class="page-head">
+        <div><h1>Attendance</h1><p>Mark each student, then WhatsApp the parents of absentees</p></div>
+      </div>
+      <div class="panel"><div class="panel-head">
+        <div class="toolbar">
+          <label class="fld"><span>Date</span><input type="date" id="attDate" value="${attState.date}" max="${U.todayISO()}"/></label>
+          <label class="fld"><span>Class</span><select id="attGrade">${gradeOpts}</select></label>
+          ${holiday ? '' : `<button class="btn" id="attAllPresent">✔ Mark all present</button>
+          <button class="btn" id="attHoliday" title="No school for ${U.esc(attState.grade)} on this date">🏖️ Mark as Holiday</button>
+          <button class="btn" id="attHolidayAll" title="No school for every class on this date">🏖️ Holiday · all classes</button>`}
+        </div>
+        <span class="muted">${U.fmtDate(attState.date)}</span>
+      </div>
+      ${holiday ? holidayBody : normalBody}</div>
+      ${isAdmin && !wholeHoliday ? adminAbsenteePanel(attState.date) : ''}`;
 
     $('#attDate').onchange = e => { attState.date = e.target.value || U.todayISO(); attendance(); };
     $('#attGrade').onchange = e => { attState.grade = e.target.value; attendance(); };
-    $('#attAllPresent').onclick = async () => { await Store.markAllPresent(attState.date, attState.grade); U.toast('All marked present', 'success'); attendance(); };
+    const ap = $('#attAllPresent'); if (ap) ap.onclick = async () => { await Store.markAllPresent(attState.date, attState.grade); U.toast('All marked present', 'success'); attendance(); };
+    const hb = $('#attHoliday'); if (hb) hb.onclick = async () => { await Store.setHoliday(attState.date, attState.grade, true); U.toast('Marked ' + attState.grade + ' as holiday', 'success'); attendance(); };
+    const hba = $('#attHolidayAll'); if (hba) hba.onclick = async () => { await Store.setHoliday(attState.date, Store.HOLIDAY_ALL, true); U.toast('Marked holiday for all classes', 'success'); attendance(); };
+    const uh = $('#attUnHoliday'); if (uh) uh.onclick = async () => { await Store.setHoliday(attState.date, attState.grade, false); U.toast('Holiday removed', 'success'); attendance(); };
+    const uha = $('#attUnHolidayAll'); if (uha) uha.onclick = async () => { await Store.setHoliday(attState.date, Store.HOLIDAY_ALL, false); U.toast('Holiday removed for all classes', 'success'); attendance(); };
     $$('[data-att]').forEach(b => b.onclick = async () => {
       await Store.setAttendance(attState.date, b.dataset.id, b.dataset.att);
       attendance();
@@ -2297,6 +2333,7 @@
 
     let P = 0, Aa = 0; dates.forEach(d => { const day = att[d] || {}; students.forEach(s => { const v = day[s.id]; if (v === 'P') P++; else if (v === 'A') Aa++; }); });
     const marked = P + Aa, pct = marked ? Math.round(P / marked * 100) : 0;
+    const holidayDates = Object.keys(Store.meta.holidays || {}).filter(d => d.slice(0, 7) === ym && (Store.holidaysOn(d) || []).length).sort();
 
     const classRows = grades.map(g => {
       const inG = students.filter(s => s.grade === g); let p = 0, a = 0;
@@ -2317,6 +2354,7 @@
         ${kpi('Avg attendance', pct + '%', { accent: pct >= 75 ? 'green' : 'amber' })}
         ${kpi('Total present', P, { accent: 'green' })}
         ${kpi('Total absent', Aa, { accent: Aa ? 'red' : 'green' })}
+        ${kpi('Holidays', holidayDates.length, { accent: holidayDates.length ? 'amber' : 'green', sub: holidayDates.length ? holidayDates.map(d => d.slice(8)).join(', ') : '—' })}
       </div>
       <div class="panel"><div class="panel-head"><h2>Attendance % by Class</h2><span class="muted">${fmtMonth(ym)}</span></div>
         <div class="panel-body pad">${classBars.length ? hbars(classBars, { pct: true }) : '<div class="empty">No attendance recorded for this month.</div>'}</div></div>
