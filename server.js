@@ -201,9 +201,10 @@ function ensureProvisionedUsers() {
     }
   });
 
-  if (changed) { DB.version++; saveDB(); }
+  return changed;
 }
-ensureProvisionedUsers();
+// Run on boot, and persist if it created/repaired anything.
+if (ensureProvisionedUsers()) { DB.version++; saveDB(); }
 
 /* ---------------- helpers ---------------- */
 const MIME = {
@@ -372,7 +373,14 @@ const server = http.createServer(async (req, res) => {
     if (url === '/api/state' && req.method === 'PUT') {
       const body = JSON.parse(await readBody(req));
       if (typeof body.baseVersion === 'number' && body.baseVersion !== DB.version) return sendJSON(res, 409, Object.assign({ buildId: BUILD_ID }, DB));
-      if (body.state) { DB.state = body.state; DB.version++; await saveDB(); }
+      if (body.state) {
+        DB.state = body.state; DB.version++;
+        // Re-ensure the guaranteed logins on every save so a deleted managed
+        // account (admin/account/teacher/academic) is immediately restored and
+        // its access re-enforced — not only on server boot.
+        ensureProvisionedUsers();
+        await saveDB();
+      }
       return sendJSON(res, 200, { version: DB.version, buildId: BUILD_ID });
     }
     if (url === '/api/version' && req.method === 'GET') return sendJSON(res, 200, { buildId: BUILD_ID, version: DB.version });
