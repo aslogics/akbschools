@@ -1633,7 +1633,8 @@ window.__AKB_SEED__ = {"school": "AKB School of Excellence", "year": "2026-2027"
         username, role: normRole(role), name: name || username,
         salt, hash: await pbkdf(password, salt), hashFb: fbHash(password, salt), mustChange: false, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
       };
-      if (u.role === 'teacher') u.grades = Array.isArray(grades) ? grades.slice() : [];
+      // Any non-admin user can be scoped to specific class(es); empty = all classes.
+      if (u.role !== 'admin') u.grades = Array.isArray(grades) ? grades.slice() : [];
       // Store an explicit page list when given (unless admin, who always has all).
       if (u.role !== 'admin' && Array.isArray(pages)) u.pages = pages.filter(k => PAGE_KEYS.indexOf(k) >= 0);
       this.users.push(u);
@@ -1642,8 +1643,9 @@ window.__AKB_SEED__ = {"school": "AKB School of Excellence", "year": "2026-2027"
     async updateUserRole(username, role) {
       const u = this.getUser(username); if (!u) return;
       u.role = normRole(role);
-      if (u.role === 'teacher') { if (!Array.isArray(u.grades)) u.grades = []; }
-      else delete u.grades;
+      // Keep any assigned class scope for non-admin roles; admin always sees all.
+      if (u.role === 'admin') delete u.grades;
+      else if (!Array.isArray(u.grades)) u.grades = [];
       // Admin implies full access; drop any custom page list.
       if (u.role === 'admin') delete u.pages;
       u.updatedAt = new Date().toISOString();
@@ -3501,8 +3503,14 @@ window.__AKB_SEED__ = {"school": "AKB School of Excellence", "year": "2026-2027"
   }
   function users() {
     const rows = Store.users.map(u => {
+      const isAdmin = u.role === 'admin';
       const isT = u.role === 'teacher';
-      const gr = isT ? (Array.isArray(u.grades) && u.grades.length ? U.esc(u.grades.join(', ')) : '<span style="color:var(--red)">no class assigned</span>') : '<span class="muted">—</span>';
+      const hasGrades = Array.isArray(u.grades) && u.grades.length;
+      // Class scoping applies to any non-admin user. Empty means "all classes"
+      // for most roles, but a teacher with none can't see anything — flag it red.
+      const gr = isAdmin ? '<span class="muted">all classes</span>'
+        : hasGrades ? U.esc(u.grades.join(', '))
+        : (isT ? '<span style="color:var(--red)">no class assigned</span>' : '<span class="muted">all classes</span>');
       return `<tr>
       <td><b>${U.esc(u.name || u.username)}</b><div class="muted" style="font-size:11px">@${U.esc(u.username)}</div></td>
       <td>${roleBadge(u.role)}${u.mustChange ? ' <span class="badge amber">default pwd</span>' : ''}</td>
@@ -3510,8 +3518,8 @@ window.__AKB_SEED__ = {"school": "AKB School of Excellence", "year": "2026-2027"
       <td>${gr}</td>
       <td class="t-right">
         <select class="sel-inline" data-roleselect="${U.esc(u.username)}">${roleOptions(u.role)}</select>
-        ${u.role === 'admin' ? '' : `<button class="btn sm" data-pages="${U.esc(u.username)}">Access</button>`}
-        ${isT ? `<button class="btn sm" data-grades="${U.esc(u.username)}">Classes</button>` : ''}
+        ${isAdmin ? '' : `<button class="btn sm" data-pages="${U.esc(u.username)}">Access</button>`}
+        ${isAdmin ? '' : `<button class="btn sm" data-grades="${U.esc(u.username)}">Classes</button>`}
         <button class="btn sm" data-reset="${U.esc(u.username)}">Reset pwd</button>
         <button class="btn sm danger" data-del="${U.esc(u.username)}">Delete</button>
       </td></tr>`;
@@ -3610,7 +3618,7 @@ window.__AKB_SEED__ = {"school": "AKB School of Excellence", "year": "2026-2027"
       <div class="modal-backdrop" id="gBackdrop"><div class="modal">
         <div class="modal-head"><h3>Assign class(es) — ${U.esc(u.name || u.username)}</h3><button class="x-close" id="gClose">&times;</button></div>
         <div class="modal-body">
-          <p class="muted">Tick the class(es) this teacher is responsible for. They'll see attendance &amp; report cards for these students only.</p>
+          <p class="muted">Tick the class(es) this user is responsible for — they'll see attendance &amp; report cards for these students only. Leave all unticked to allow every class.</p>
           <div class="chk-grid" id="gGrades">${gradeCheckboxes(u.grades)}</div>
         </div>
         <div class="modal-foot"><button class="btn" id="gCancel">Cancel</button><button class="btn primary" id="gSave">Save classes</button></div>
@@ -3647,7 +3655,8 @@ window.__AKB_SEED__ = {"school": "AKB School of Excellence", "year": "2026-2027"
           <div class="field"><label>Full name</label><input id="uName" placeholder="e.g. Mrs. Priya (Grade 3 teacher)"/></div>
           <div class="field"><label>Username</label><input id="uUser" placeholder="e.g. teacher_g3"/></div>
           <div class="field"><label>Role</label><select id="uRole">${roleOptions(firstRole)}</select></div>
-          <div class="field hidden" id="uGradesField"><label>Class(es) this teacher handles</label>
+          <div class="field hidden" id="uGradesField"><label>Class(es) this user handles
+              <span class="muted" style="font-weight:400">— leave all unticked to allow every class</span></label>
             <div class="chk-grid" id="uGrades">${gradeCheckboxes([])}</div></div>
           <div class="field" id="uPagesField"><label>Pages this user can access
               <span class="muted" style="font-weight:400">— tick as you wish</span></label>
@@ -3666,9 +3675,10 @@ window.__AKB_SEED__ = {"school": "AKB School of Excellence", "year": "2026-2027"
     $('#uBackdrop', root).onclick = e => { if (e.target.id === 'uBackdrop') close(); };
     const syncRole = () => {
       const rl = $('#uRole', root).value;
-      $('#uGradesField', root).classList.toggle('hidden', rl !== 'teacher');
       // Admin always has all pages → hide the picker; otherwise reset ticks to the role default.
       const isAdmin = rl === 'admin';
+      // Any non-admin user can be scoped to specific class(es).
+      $('#uGradesField', root).classList.toggle('hidden', isAdmin);
       $('#uPagesField', root).classList.toggle('hidden', isAdmin);
       // Rebuild the page list for this role (money pages appear only for account),
       // pre-ticked to the role default.
@@ -3682,7 +3692,7 @@ window.__AKB_SEED__ = {"school": "AKB School of Excellence", "year": "2026-2027"
     $('#uSave', root).onclick = async () => {
       try {
         const role = $('#uRole', root).value;
-        const grades = role === 'teacher' ? $$('#uGrades input:checked', root).map(c => c.value) : undefined;
+        const grades = role === 'admin' ? undefined : $$('#uGrades input:checked', root).map(c => c.value);
         const pages = role === 'admin' ? undefined : $$('#uPages input:checked', root).map(c => c.value);
         await Store.addUser({ name: $('#uName', root).value, username: $('#uUser', root).value, role, password: $('#uPass', root).value, grades, pages });
         close(); afterUserWrite('User created'); users();
@@ -3856,12 +3866,14 @@ window.__AKB_SEED__ = {"school": "AKB School of Excellence", "year": "2026-2027"
   // (this also reflects class re-assignments made while the teacher is logged in).
   function myGrades() {
     const cu = Store.currentUser; if (!cu) return [];
-    // Only teachers are scoped to assigned classes; every other role that can
-    // reach attendance/report cards (admin, account, AKBCH Academics, AKB Admins)
-    // sees all classes.
-    if (cu.role !== 'teacher') return Store.gradeList();
+    // Admin always sees every class. Any other user is scoped to the class(es)
+    // assigned to them (Users → Classes); if none are assigned they see all — so
+    // scoping is opt-in per user, "as per my wish", for teachers and the AKBCH
+    // Academics / AKB Admins roles alike.
+    if (cu.role === 'admin') return Store.gradeList();
     const u = Store.getUser(cu.username) || cu;
-    return Array.isArray(u.grades) ? u.grades.filter(Boolean) : [];
+    const g = Array.isArray(u.grades) ? u.grades.filter(Boolean) : [];
+    return g.length ? g : Store.gradeList();
   }
   const GRADE_COLORS = { EX: '#16a34a', GD: '#2563eb', SA: '#d97706', NI: '#dc2626' };
   // Grades 1-9 store numeric marks (0-100); KG stores skill grade codes.

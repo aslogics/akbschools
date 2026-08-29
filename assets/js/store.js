@@ -1094,7 +1094,8 @@
         username, role: normRole(role), name: name || username,
         salt, hash: await pbkdf(password, salt), hashFb: fbHash(password, salt), mustChange: false, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
       };
-      if (u.role === 'teacher') u.grades = Array.isArray(grades) ? grades.slice() : [];
+      // Any non-admin user can be scoped to specific class(es); empty = all classes.
+      if (u.role !== 'admin') u.grades = Array.isArray(grades) ? grades.slice() : [];
       // Store an explicit page list when given (unless admin, who always has all).
       if (u.role !== 'admin' && Array.isArray(pages)) u.pages = pages.filter(k => PAGE_KEYS.indexOf(k) >= 0);
       this.users.push(u);
@@ -1103,8 +1104,9 @@
     async updateUserRole(username, role) {
       const u = this.getUser(username); if (!u) return;
       u.role = normRole(role);
-      if (u.role === 'teacher') { if (!Array.isArray(u.grades)) u.grades = []; }
-      else delete u.grades;
+      // Keep any assigned class scope for non-admin roles; admin always sees all.
+      if (u.role === 'admin') delete u.grades;
+      else if (!Array.isArray(u.grades)) u.grades = [];
       // Admin implies full access; drop any custom page list.
       if (u.role === 'admin') delete u.pages;
       u.updatedAt = new Date().toISOString();
