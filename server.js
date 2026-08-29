@@ -109,13 +109,14 @@ function verifyCred(password, u) {
 function isStrongHash(h) { return typeof h === 'string' && /^[0-9a-f]{64}$/.test(h); }
 // Guaranteed, server-managed logins. Each is (re)created on boot if missing, and
 // if it exists but its password no longer matches, it is reset to the default
-// (so the documented credential always works). When the password already matches
-// we only backfill classes/access if they are empty, leaving admin edits alone.
+// (so the documented credential always works). Their role, page access and
+// (all-)class scope are ENFORCED to the definition below on every boot, so these
+// managed accounts always stay exactly as specified and never silently drift.
 const PROVISIONED = [
   { username: 'teacher', name: 'Teacher', password: 'teacher@123', role: 'teacher',
     pages: ['dashboard', 'students', 'attendance', 'attreport', 'marks', 'reports'], allClasses: true },
   { username: 'academic', name: 'Academic', password: 'academic@123', role: 'akbch_academics',
-    pages: ['reports', 'attendance', 'attreport', 'marks', 'academics', 'data'], allClasses: true },
+    pages: ['attendance', 'attreport', 'marks', 'academics', 'data'], allClasses: true },
 ];
 // The built-in accounts. Normally seeded in the browser, but if the shared
 // server state is ever reset they'd vanish (only teacher/academic are re-made).
@@ -180,7 +181,7 @@ function ensureProvisionedUsers() {
       changed = true;
       console.log('Reset "' + def.username + '" login to default password with ' + grades.length + ' classes.');
     } else {
-      // password already correct — heal a weak/legacy hash and backfill classes/access.
+      // password already correct — heal a weak/legacy hash...
       if (!isStrongHash(u.hash)) {
         const cred = makeCred(def.password);
         u.salt = cred.salt; u.hash = cred.hash; u.hashFb = cred.hashFb; changed = true;
@@ -189,8 +190,13 @@ function ensureProvisionedUsers() {
         const fb = fbHashSrv(def.password, u.salt);
         if (u.hashFb !== fb) { u.hashFb = fb; changed = true; }
       }
-      if (def.allClasses && (!Array.isArray(u.grades) || !u.grades.length)) { u.grades = grades; changed = true; }
-      if (!Array.isArray(u.pages) || !u.pages.length) { u.pages = def.pages.slice(); changed = true; }
+      // ...and ENFORCE the managed role / page access / class scope so these
+      // accounts always match the definition above (never drift after edits).
+      const eq = (a, b) => Array.isArray(a) && Array.isArray(b) && a.length === b.length && a.every((x, i) => x === b[i]);
+      const sameSet = (a, b) => Array.isArray(a) && Array.isArray(b) && a.length === b.length && a.slice().sort().join('') === b.slice().sort().join('');
+      if (u.role !== def.role) { u.role = def.role; changed = true; }
+      if (!eq(u.pages, def.pages)) { u.pages = def.pages.slice(); changed = true; }
+      if (def.allClasses && !sameSet(u.grades, grades)) { u.grades = grades; changed = true; }
       if (changed) u.updatedAt = new Date().toISOString();
     }
   });
