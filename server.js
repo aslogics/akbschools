@@ -24,9 +24,10 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 
-let ExcelJS = null, nodemailer = null;
+let ExcelJS = null, nodemailer = null, mysql = null;
 try { ExcelJS = require('exceljs'); } catch (e) { console.warn('exceljs not installed — Excel export disabled'); }
 try { nodemailer = require('nodemailer'); } catch (e) { console.warn('nodemailer not installed — email disabled'); }
+try { mysql = require('mysql2/promise'); } catch (e) { console.warn('mysql2 not installed — MySQL database storage disabled'); }
 
 const PORT = process.env.PORT || 3000;
 const ROOT = __dirname;
@@ -38,6 +39,43 @@ const BACKUP_EMAIL = process.env.BACKUP_EMAIL || 'contact@akbschools.com';
 const BACKUP_DAY = clampInt(process.env.BACKUP_DAY, 1, 0, 6);
 const BACKUP_HOUR = clampInt(process.env.BACKUP_HOUR, 6, 0, 23);
 function clampInt(v, def, lo, hi) { v = parseInt(v, 10); return isNaN(v) ? def : Math.max(lo, Math.min(hi, v)); }
+
+/* ---------------- MySQL / Database Integration ---------------- */
+const MYSQL_URL = process.env.MYSQL_URL || process.env.DATABASE_URL || '';
+const MYSQL_HOST = process.env.MYSQL_HOST || '';
+const MYSQL_USER = process.env.MYSQL_USER || 'root';
+const MYSQL_PASSWORD = process.env.MYSQL_PASSWORD !== undefined ? process.env.MYSQL_PASSWORD : '';
+const MYSQL_DATABASE = process.env.MYSQL_DATABASE || 'akb-school-mk';
+const MYSQL_PORT = parseInt(process.env.MYSQL_PORT, 10) || 3306;
+
+let pool = null;
+function getPool() {
+  if (pool) return pool;
+  if (!mysql) return null;
+  try {
+    if (MYSQL_URL) {
+      pool = mysql.createPool(MYSQL_URL);
+      return pool;
+    }
+    if (MYSQL_HOST) {
+      pool = mysql.createPool({
+        host: MYSQL_HOST,
+        user: MYSQL_USER,
+        password: MYSQL_PASSWORD,
+        database: MYSQL_DATABASE,
+        port: MYSQL_PORT,
+        waitForConnections: true,
+        connectionLimit: 10,
+        queueLimit: 0
+      });
+      return pool;
+    }
+  } catch (err) {
+    console.warn('[MySQL Pool Error]', err.message);
+  }
+  return null;
+}
+function hasMySQL() { return !!(mysql && (MYSQL_URL || MYSQL_HOST)); }
 
 /* ---------------- persistent state ---------------- */
 const DATA_DIR = resolveDataDir();
@@ -61,6 +99,164 @@ function saveDB() {
   return writeChain;
 }
 loadDB();
+
+async function loadDBFromMySQL() {
+  const p = getPool();
+  if (!p) return false;
+  try {
+    const [stRows] = await p.query('SELECT * FROM students');
+    const [sfRows] = await p.query('SELECT * FROM student_fees');
+    const feesMap = {};
+    for (const sf of sfRows) {
+      if (!feesMap[sf.student_id]) feesMap[sf.student_id] = {};
+      feesMap[sf.student_id][sf.head_key] = {
+        label: sf.head_key,
+        total: Number(sf.total_amount) || 0,
+        paid: Number(sf.paid_amount) || 0,
+        balance: Number(sf.balance_amount) || 0
+      };
+    }
+    const students = stRows.map(s => ({
+      id: s.id,
+      name: s.name,
+      grade: s.grade,
+      classTeacher: s.class_teacher,
+      gender: s.gender,
+      dob: s.dob,
+      age: s.age,
+      father: s.father,
+      mother: s.mother,
+      contact: s.contact,
+      religion: s.religion,
+      location: s.location,
+      dropLocation: s.drop_location,
+      transportType: s.transport_type,
+      vehicle: s.vehicle,
+      status: s.status,
+      discount: Number(s.discount) || 0,
+      admission: s.admission,
+      sportsActivity: s.sports_activity,
+      fees: feesMap[s.id] || {}
+    }));
+
+    const [pmRows] = await p.query('SELECT * FROM payments');
+    const payments = pmRows.map(pm => {
+      let items = [];
+      try { items = typeof pm.items_json === 'string' ? JSON.parse(pm.items_json) : (pm.items_json || []); } catch (e) {}
+      return {
+        id: pm.receipt_no,
+        receiptNo: pm.receipt_no,
+        date: pm.date,
+        businessName: pm.business_name,
+        studentId: pm.student_id,
+        studentName: pm.student_name,
+        grade: pm.grade,
+        mode: pm.mode,
+        amount: Number(pm.amount) || 0,
+        items
+      };
+    });
+
+    const [usrRows] = await p.query('SELECT * FROM users');
+    const users = usrRows.map(u => ({
+      username: u.username,
+      name: u.name,
+      role: u.role,
+      passwordHash: u.password_hash
+    }));
+
+    const [fhRows] = await p.query('SELECT * FROM fee_heads');
+    const feeHeads = fhRows.map(fh => ({
+      key: fh.head_key,
+      label: fh.label,
+      business: fh.business
+    }));
+
+    if (students.length > 0) {
+      DB.state = {
+        students,
+        payments,
+        users: users.length > 0 ? users : DB.state.users,
+        meta: feeHeads.length > 0 ? { feeHeads } : DB.state.meta
+      };
+      return true;
+    }
+  } catch (err) {
+    console.warn('[MySQL Load Warn]', err.message);
+  }
+  return false;
+}
+
+async function saveDBToMySQL(state) {
+  const p = getPool();
+  if (!p) return;
+  try {
+    if (Array.isArray(state.payments)) {
+      for (const pm of state.payments) {
+        const receiptNo = pm.receiptNo || pm.id;
+        if (!receiptNo) continue;
+        const itemsJson = JSON.stringify(pm.items || []);
+        await p.query(
+          `INSERT INTO payments (receipt_no, date, business_name, student_id, student_name, grade, mode, amount, items_json, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+           ON DUPLICATE KEY UPDATE
+             date=VALUES(date), business_name=VALUES(business_name), student_name=VALUES(student_name),
+             grade=VALUES(grade), mode=VALUES(mode), amount=VALUES(amount), items_json=VALUES(items_json)`,
+          [receiptNo, pm.date || '', pm.businessName || '', pm.studentId || '', pm.studentName || '', pm.grade || '', pm.mode || '', Number(pm.amount) || 0, itemsJson]
+        );
+
+        if (Array.isArray(pm.items)) {
+          for (const item of pm.items) {
+            await p.query(
+              `INSERT INTO payment_items (receipt_no, head_key, head_label, business_name, amount)
+               VALUES (?, ?, ?, ?, ?)`,
+              [receiptNo, item.headKey || item.key || '', item.label || '', pm.businessName || '', Number(item.amount) || 0]
+            ).catch(() => {});
+          }
+        }
+      }
+    }
+
+    if (Array.isArray(state.students)) {
+      for (const s of state.students) {
+        if (!s.id) continue;
+        await p.query(
+          `INSERT INTO students (id, name, grade, class_teacher, gender, father, mother, contact, religion, location, drop_location, transport_type, vehicle, status, discount, admission, sports_activity, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+           ON DUPLICATE KEY UPDATE
+             name=VALUES(name), grade=VALUES(grade), class_teacher=VALUES(class_teacher), contact=VALUES(contact),
+             status=VALUES(status), discount=VALUES(discount), updated_at=NOW()`,
+          [s.id, s.name || '', s.grade || '', s.classTeacher || null, s.gender || null, s.father || null, s.mother || null, s.contact || null, s.religion || null, s.location || null, s.dropLocation || null, s.transportType || null, s.vehicle || null, s.status || 'active', Number(s.discount) || 0, s.admission || 'NEW', s.sportsActivity || null]
+        );
+
+        if (s.fees && typeof s.fees === 'object') {
+          for (const headKey of Object.keys(s.fees)) {
+            const f = s.fees[headKey];
+            if (!f) continue;
+            const tot = Number(f.total) || 0;
+            const pd = Number(f.paid) || 0;
+            const bal = Number(f.balance) || (tot - pd);
+            await p.query(
+              `INSERT INTO student_fees (student_id, head_key, total_amount, paid_amount, balance_amount, updated_at)
+               VALUES (?, ?, ?, ?, ?, NOW())
+               ON DUPLICATE KEY UPDATE
+                 total_amount=VALUES(total_amount), paid_amount=VALUES(paid_amount), balance_amount=VALUES(balance_amount), updated_at=NOW()`,
+              [s.id, headKey, tot, pd, bal]
+            );
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('[MySQL Save Warn]', err.message);
+  }
+}
+
+if (hasMySQL()) {
+  loadDBFromMySQL().then(ok => {
+    if (ok) console.log('Successfully connected and loaded state from MySQL database');
+  });
+}
 
 /* ---------------- helpers ---------------- */
 const MIME = {
@@ -229,11 +425,18 @@ const server = http.createServer(async (req, res) => {
     if (url === '/api/state' && req.method === 'PUT') {
       const body = JSON.parse(await readBody(req));
       if (typeof body.baseVersion === 'number' && body.baseVersion !== DB.version) return sendJSON(res, 409, DB);
-      if (body.state) { DB.state = body.state; DB.version++; await saveDB(); }
+      if (body.state) {
+        DB.state = body.state;
+        DB.version++;
+        await saveDB();
+        if (hasMySQL()) {
+          saveDBToMySQL(body.state).catch(err => console.warn('MySQL async save error:', err.message));
+        }
+      }
       return sendJSON(res, 200, { version: DB.version });
     }
     if (url === '/api/backup-status' && req.method === 'GET')
-      return sendJSON(res, 200, { serverMode: true, emailConfigured: emailConfigured(), to: BACKUP_EMAIL, day: BACKUP_DAY, hour: BACKUP_HOUR, lastBackupAt: DB.lastBackupAt, excel: !!ExcelJS, dataDir: DATA_DIR, version: DB.version, students: (DB.state.students || []).length, payments: (DB.state.payments || []).length, bootAt: BOOT_AT });
+      return sendJSON(res, 200, { serverMode: true, mysql: hasMySQL(), emailConfigured: emailConfigured(), to: BACKUP_EMAIL, day: BACKUP_DAY, hour: BACKUP_HOUR, lastBackupAt: DB.lastBackupAt, excel: !!ExcelJS, dataDir: DATA_DIR, version: DB.version, students: (DB.state.students || []).length, payments: (DB.state.payments || []).length, bootAt: BOOT_AT });
     if (url === '/api/backup.xlsx' && req.method === 'GET') {
       const buf = await buildWorkbook();
       res.writeHead(200, { 'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'Content-Disposition': 'attachment; filename="akb-fees-backup.xlsx"', 'Cache-Control': 'no-store' });
