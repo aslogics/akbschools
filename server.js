@@ -478,8 +478,7 @@ const server = http.createServer(async (req, res) => {
     if (url === '/api/state' && req.method === 'GET') return sendJSON(res, 200, DB);
     if (url === '/api/state' && req.method === 'PUT') {
       const body = JSON.parse(await readBody(req));
-      if (typeof body.baseVersion === 'number' && body.baseVersion !== DB.version) return sendJSON(res, 409, DB);
-      if (body.state) {
+      if (body && body.state) {
         DB.state = body.state;
         DB.version++;
         await saveDB();
