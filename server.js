@@ -205,10 +205,6 @@ async function saveDBToMySQL(state) {
   try {
     // 1. Sync Payments
     if (Array.isArray(state.payments)) {
-      const activeReceipts = state.payments.map(pm => pm.receiptNo || pm.id).filter(Boolean);
-      if (activeReceipts.length > 0) {
-        await p.query('DELETE FROM payments WHERE receipt_no NOT IN (?)', [activeReceipts]).catch(() => {});
-      }
       for (const pm of state.payments) {
         const receiptNo = pm.receiptNo || pm.id;
         if (!receiptNo) continue;
@@ -236,10 +232,6 @@ async function saveDBToMySQL(state) {
 
     // 2. Sync Students and Fee Balances
     if (Array.isArray(state.students)) {
-      const activeStudentIds = state.students.map(s => s.id).filter(Boolean);
-      if (activeStudentIds.length > 0) {
-        await p.query('DELETE FROM students WHERE id NOT IN (?)', [activeStudentIds]).catch(() => {});
-      }
       for (const s of state.students) {
         if (!s.id) continue;
         await p.query(
@@ -275,10 +267,6 @@ async function saveDBToMySQL(state) {
 
     // 3. Sync Users
     if (Array.isArray(state.users)) {
-      const activeUsernames = state.users.map(u => u.username).filter(Boolean);
-      if (activeUsernames.length > 0) {
-        await p.query('DELETE FROM users WHERE username NOT IN (?)', [activeUsernames]).catch(() => {});
-      }
       for (const u of state.users) {
         if (!u.username) continue;
         const pwd = u.salt ? `${u.salt}:${u.hash}` : (u.passwordHash || u.hash || u.password || 'admin@123');
