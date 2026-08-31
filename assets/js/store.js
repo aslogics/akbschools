@@ -694,6 +694,17 @@
     async _saveFeeHeads() {
       this.meta.feeHeads = this.feeHeads;
       rebuildHeads(this.feeHeads);
+      if (serverMode && Array.isArray(this.feeHeads)) {
+        for (const fh of this.feeHeads) {
+          try {
+            await fetch('/api/fee-heads/' + encodeURIComponent(fh.key), {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(fh)
+            });
+          } catch (e) {}
+        }
+      }
       await this.persistMeta();
     },
     _slugKey(label) {
@@ -722,6 +733,11 @@
     async deleteFeeHead(key) {
       this.feeHeads = this.feeHeads.filter(h => h.key !== key);
       this.students.forEach(s => { delete s.fees[key]; });
+      if (serverMode) {
+        try {
+          await fetch('/api/fee-heads/' + encodeURIComponent(key), { method: 'DELETE' });
+        } catch (e) {}
+      }
       await this._saveFeeHeads(); await this.persistStudents();
     },
     async moveFeeHead(key, dir) {
