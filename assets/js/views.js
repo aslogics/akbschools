@@ -1607,22 +1607,10 @@
     $('#gSave', root).onclick = async () => {
       const grades = $$('#gGrades input:checked', root).map(c => c.value);
       await Store.setUserGrades(username, grades);
-      close(); afterUserWrite('Classes assigned'); users();
+      close(); U.toast('Classes assigned', 'success'); users();
     };
   }
 
-  // After creating/updating a login, tell the admin plainly whether it reached
-  // the shared server (so it works on mobiles / other devices) or only saved
-  // locally — the usual reason a new user "can't log in on mobile".
-  function afterUserWrite(okMsg) {
-    if (!Store.serverMode()) {
-      U.toast('Saved on THIS device only — the app is offline, so this login will NOT work on mobiles/other devices until this device reconnects and syncs.', 'error');
-    } else if (Store.pendingSync()) {
-      U.toast('Saved here but the server did not confirm yet — check your internet. The login may not work on other devices until it syncs.', 'error');
-    } else {
-      U.toast(okMsg + ' · synced to all devices', 'success');
-    }
-  }
   function userModal() {
     const root = document.getElementById('modalRoot');
     const firstRole = (Store.ROLES[1] && Store.ROLES[1].key) || 'account'; // default to "account"
@@ -1673,7 +1661,7 @@
         const grades = role === 'admin' ? undefined : $$('#uGrades input:checked', root).map(c => c.value);
         const pages = role === 'admin' ? undefined : $$('#uPages input:checked', root).map(c => c.value);
         await Store.addUser({ name: $('#uName', root).value, username: $('#uUser', root).value, role, password: $('#uPass', root).value, grades, pages });
-        close(); afterUserWrite('User created'); users();
+        close(); U.toast('User created', 'success'); users();
       } catch (e) { U.toast(e.message, 'error'); }
     };
   }
@@ -1691,7 +1679,7 @@
     $('#rBackdrop', root).onclick = e => { if (e.target.id === 'rBackdrop') close(); };
     $('#rSave', root).onclick = async () => {
       const p = $('#rPass', root).value; if (!p || p.length < 4) { U.toast('Password too short', 'error'); return; }
-      await Store.setPassword(username, p); close(); afterUserWrite('Password updated'); if (location.hash.indexOf('users') >= 0) users();
+      await Store.setPassword(username, p); close(); U.toast('Password updated', 'success'); if (location.hash.indexOf('users') >= 0) users();
     };
   }
 
@@ -2371,230 +2359,5 @@
     bindNav();
   }
 
-  /* -------------------------------------------------- Expenses (admin/account) */
-  let expState = { q: '', business: '', category: '', month: '' };
-  const EXP_MODES = ['Cash', 'G.Pay', 'Bank', 'Cheque', 'Card'];
-  function expenses() {
-    if (!Store.canCollect()) { view().innerHTML = '<div class="empty">You don’t have access to Expenses.</div>'; return; }
-    const cats = Store.expenseCats();
-    const all = (Store.expenses || []).slice().sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : (a.createdAt < b.createdAt ? 1 : -1)));
-    const ym = expState.month || '';
-    const rows = all.filter(e => {
-      if (expState.business && e.business !== expState.business) return false;
-      if (expState.category && e.category !== expState.category) return false;
-      if (ym && String(e.date || '').slice(0, 7) !== ym) return false;
-      if (expState.q) { const q = expState.q.toLowerCase(); if (!((e.billNo || '') + ' ' + (e.reference || '') + ' ' + (e.payee || '') + ' ' + (e.note || '') + ' ' + (e.categoryLabel || '') + ' ' + (e.item || '')).toLowerCase().includes(q)) return false; }
-      return true;
-    });
-    const sum = arr => arr.reduce((a, e) => a + (Number(e.amount) || 0), 0);
-    const thisMonth = new Date().toISOString().slice(0, 7);
-    const totalAll = sum(all), totalMonth = sum(all.filter(e => String(e.date || '').slice(0, 7) === thisMonth)), totalShown = sum(rows);
-    // per-firm totals (of the filtered rows)
-    const byBiz = Store.BUSINESS_ORDER.map(bk => ({ bk, name: Store.BUSINESSES[bk].name, total: sum(rows.filter(e => e.business === bk)) })).filter(x => x.total > 0);
-    const months = Array.from(new Set(all.map(e => String(e.date || '').slice(0, 7)).filter(Boolean))).sort().reverse();
-
-    const tableRows = rows.map(e => `<tr>
-      <td>${U.fmtDate(e.date)}</td>
-      <td><b>${U.esc(e.categoryLabel || e.category || '')}</b></td>
-      <td>${U.esc(e.item || '')}</td>
-      <td class="muted" style="font-size:12px">${U.esc(e.businessName || '')}</td>
-      <td class="mono">${U.esc(e.billNo || '')}</td>
-      <td>${U.esc(e.reference || '')}${e.payee ? `<div class="muted" style="font-size:11px">${U.esc(e.payee)}</div>` : ''}</td>
-      <td><span class="pill-mode">${U.esc(e.mode || '')}</span></td>
-      <td class="num" style="color:var(--red);font-weight:600">${U.inr(e.amount)}</td>
-      <td class="t-right"><button class="btn sm" data-exedit="${U.esc(e.id)}">Edit</button> <button class="btn sm danger" data-exdel="${U.esc(e.id)}">✕</button></td></tr>`).join('')
-      || '<tr><td colspan="9" class="empty">No expenses match these filters. Click “＋ Add Expense”.</td></tr>';
-
-    view().innerHTML = `
-      <div class="page-head"><div><h1>Expenses</h1><p>Record and track school expenses by firm &amp; category</p></div>
-        <div class="flex gap">${Store.isAdmin() ? '<button class="btn" id="expCats">Manage categories</button><button class="btn" id="expItems">Manage sub-categories</button>' : ''}<button class="btn primary" id="addExp">＋ Add Expense</button></div></div>
-      <div class="cards">
-        ${kpi('Total Expenses', U.inr(totalAll), { accent: 'red' })}
-        ${kpi('This Month', U.inr(totalMonth), { accent: 'amber', sub: fmtMonth(thisMonth) })}
-        ${kpi('Entries', all.length, { accent: 'blue' })}
-        ${kpi('Shown (filtered)', U.inr(totalShown), { accent: 'green', sub: rows.length + ' entr' + (rows.length === 1 ? 'y' : 'ies') })}
-      </div>
-      ${byBiz.length ? `<div class="panel"><div class="panel-body pad"><div class="flex gap wrap">${byBiz.map(x => `<span class="badge gray" style="font-size:12px">${U.esc(x.name)}: <b style="color:var(--red)">${U.inr(x.total)}</b></span>`).join('')}</div></div></div>` : ''}
-      <div class="panel">
-        <div class="panel-head"><h2>Expense Records</h2>
-          <div class="toolbar flex gap wrap">
-            <input id="expQ" type="search" placeholder="Search bill / reference / payee…" value="${U.esc(expState.q)}"/>
-            <select id="expBiz"><option value="">All firms</option>${Store.BUSINESS_ORDER.map(b => `<option value="${b}"${expState.business === b ? ' selected' : ''}>${U.esc(Store.BUSINESSES[b].name)}</option>`).join('')}</select>
-            <select id="expCat"><option value="">All categories</option>${cats.map(c => `<option value="${U.esc(c.key)}"${expState.category === c.key ? ' selected' : ''}>${U.esc(c.label)}</option>`).join('')}</select>
-            <select id="expMonth"><option value="">All months</option>${months.map(m => `<option value="${m}"${expState.month === m ? ' selected' : ''}>${fmtMonth(m)}</option>`).join('')}</select>
-            <button class="btn sm" id="expCsv">⬇ CSV</button>
-          </div>
-        </div>
-        <div class="table-scroll"><table>
-          <thead><tr><th>Date</th><th>Category</th><th>Sub-category</th><th>Firm</th><th>Bill No</th><th>Reference / Payee</th><th>Mode</th><th class="num">Amount</th><th class="t-right">Actions</th></tr></thead>
-          <tbody>${tableRows}</tbody>
-          <tfoot><tr><td colspan="7">TOTAL (${rows.length})</td><td class="num" style="color:var(--red);font-weight:700">${U.inr(totalShown)}</td><td></td></tr></tfoot>
-        </table></div>
-      </div>`;
-
-    $('#addExp').onclick = () => expenseModal(null);
-    const ec = $('#expCats'); if (ec) ec.onclick = () => expenseCatsModal();
-    const ei = $('#expItems'); if (ei) ei.onclick = () => expenseItemsModal();
-    $('#expQ').oninput = U.debounce(e => { expState.q = e.target.value; expenses(); }, 200);
-    $('#expBiz').onchange = e => { expState.business = e.target.value; expenses(); };
-    $('#expCat').onchange = e => { expState.category = e.target.value; expenses(); };
-    $('#expMonth').onchange = e => { expState.month = e.target.value; expenses(); };
-    $('#expCsv').onclick = () => exportExpensesCsv(rows);
-    $$('[data-exedit]').forEach(b => b.onclick = () => expenseModal(b.dataset.exedit));
-    $$('[data-exdel]').forEach(b => b.onclick = async () => {
-      if (!confirm('Delete this expense?')) return;
-      await Store.deleteExpense(b.dataset.exdel); U.toast('Expense deleted', 'success'); expenses();
-    });
-  }
-
-  function exportExpensesCsv(rows) {
-    const head = ['Date', 'Category', 'Sub-category', 'Firm', 'Bill No', 'Reference', 'Payee', 'Mode', 'Amount', 'Note'];
-    const lines = [head.join(',')].concat(rows.map(e => [e.date, e.categoryLabel || e.category, e.item, e.businessName, e.billNo, e.reference, e.payee, e.mode, e.amount, e.note]
-      .map(v => `"${String(v == null ? '' : v).replace(/"/g, '""')}"`).join(',')));
-    U.download('expenses.csv', lines.join('\n'), 'text/csv');
-  }
-
-  function expenseModal(id) {
-    const editing = id ? (Store.expenses || []).find(e => e.id === id) : null;
-    const cats = Store.expenseCats();
-    const root = document.getElementById('modalRoot');
-    const catOpts = sel => cats.map(c => `<option value="${U.esc(c.key)}"${sel === c.key ? ' selected' : ''}>${U.esc(c.label)}</option>`).join('');
-    const bizOpts = sel => Store.BUSINESS_ORDER.map(b => `<option value="${b}"${sel === b ? ' selected' : ''}>${U.esc(Store.BUSINESSES[b].name)}</option>`).join('');
-    const cur = editing || {};
-    const defCat = cur.category || (cats[0] && cats[0].key) || '';
-    const defBiz = cur.business || (Store.expenseCat(defCat) || {}).business || 'school';
-    root.innerHTML = `
-      <div class="modal-backdrop" id="exBackdrop"><div class="modal">
-        <div class="modal-head"><h3>${editing ? 'Edit expense' : 'Add expense'}</h3><button class="x-close" id="exClose">&times;</button></div>
-        <div class="modal-body">
-          <div class="grid2">
-            <div class="field"><label>Date</label><input type="date" id="exDate" value="${U.esc(cur.date || U.todayISO())}"/></div>
-            <div class="field"><label>Amount (₹)</label><input type="number" min="0" step="1" id="exAmount" value="${cur.amount != null ? U.esc(cur.amount) : ''}" placeholder="0"/></div>
-          </div>
-          <div class="field"><label>Expense category</label>
-            <div class="flex gap"><select id="exCat" style="flex:1">${catOpts(defCat)}</select>${Store.isAdmin() ? '<button class="btn sm" id="exAddCat" type="button">＋ Add</button>' : ''}</div></div>
-          <div class="field"><label>Sub-category (bill item)</label>
-            <div class="flex gap"><input id="exItem" list="exItemsDL" style="flex:1" value="${U.esc(cur.item || '')}" placeholder="Select or type…" autocomplete="off"/><button class="btn sm" id="exAddItem" type="button">＋ Add</button></div>
-            <datalist id="exItemsDL">${Store.expenseItems().map(x => `<option value="${U.esc(x)}"></option>`).join('')}</datalist></div>
-          <div class="field"><label>Firm (billed under)</label><select id="exBiz">${bizOpts(defBiz)}</select></div>
-          <div class="grid2">
-            <div class="field"><label>Bill No</label><input id="exBill" value="${U.esc(cur.billNo || '')}" placeholder="e.g. INV-1024"/></div>
-            <div class="field"><label>Mode</label><select id="exMode">${EXP_MODES.map(m => `<option${cur.mode === m ? ' selected' : ''}>${U.esc(m)}</option>`).join('')}</select></div>
-          </div>
-          <div class="field"><label>Reference</label><input id="exRef" value="${U.esc(cur.reference || '')}" placeholder="what it was for"/></div>
-          <div class="field"><label>Paid to / Payee <span class="muted" style="font-weight:400">(optional)</span></label><input id="exPayee" value="${U.esc(cur.payee || '')}" placeholder="vendor / person"/></div>
-          <div class="field"><label>Note <span class="muted" style="font-weight:400">(optional)</span></label><input id="exNote" value="${U.esc(cur.note || '')}"/></div>
-        </div>
-        <div class="modal-foot"><button class="btn" id="exCancel">Cancel</button><button class="btn primary" id="exSave">${editing ? 'Save changes' : 'Save expense'}</button></div>
-      </div></div>`;
-    const close = () => { root.innerHTML = ''; };
-    $('#exClose', root).onclick = close; $('#exCancel', root).onclick = close;
-    $('#exBackdrop', root).onclick = e => { if (e.target.id === 'exBackdrop') close(); };
-    // when the category changes, default the firm to that category's firm
-    $('#exCat', root).onchange = () => { const c = Store.expenseCat($('#exCat', root).value); if (c) $('#exBiz', root).value = c.business; };
-    const addCatBtn = $('#exAddCat', root);
-    if (addCatBtn) addCatBtn.onclick = async () => {
-      const name = prompt('New expense category name:'); if (!name || !name.trim()) return;
-      try { const k = await Store.addExpenseCat(name.trim(), $('#exBiz', root).value); U.toast('Category added', 'success'); $('#exCat', root).innerHTML = catOpts(k); $('#exCat', root).value = k; const c = Store.expenseCat(k); if (c) $('#exBiz', root).value = c.business; }
-      catch (e) { U.toast(e.message, 'error'); }
-    };
-    $('#exAddItem', root).onclick = async () => {
-      const inp = $('#exItem', root);
-      let name = (inp.value || '').trim(); if (!name) { name = (prompt('New sub-category (bill item):') || '').trim(); }
-      if (!name) return;
-      try { const v = await Store.addExpenseItem(name); inp.value = v; $('#exItemsDL', root).innerHTML = Store.expenseItems().map(x => `<option value="${U.esc(x)}"></option>`).join(''); U.toast('Sub-category added', 'success'); }
-      catch (e) { U.toast(e.message, 'error'); }
-    };
-    $('#exSave', root).onclick = async () => {
-      try {
-        const data = {
-          date: $('#exDate', root).value, amount: $('#exAmount', root).value,
-          category: $('#exCat', root).value, item: $('#exItem', root).value, business: $('#exBiz', root).value,
-          billNo: $('#exBill', root).value, mode: $('#exMode', root).value,
-          reference: $('#exRef', root).value, payee: $('#exPayee', root).value, note: $('#exNote', root).value
-        };
-        if (editing) await Store.updateExpense(editing.id, data); else await Store.addExpense(data);
-        close();
-        U.toast(editing ? 'Expense updated' : 'Expense added', 'success');
-        expenses();
-      } catch (e) { U.toast(e.message, 'error'); }
-    };
-  }
-
-  function expenseCatsModal() {
-    const root = document.getElementById('modalRoot');
-    function render() {
-      const cats = Store.expenseCats();
-      root.innerHTML = `
-        <div class="modal-backdrop" id="ecBackdrop"><div class="modal">
-          <div class="modal-head"><h3>Expense categories</h3><button class="x-close" id="ecClose">&times;</button></div>
-          <div class="modal-body">
-            <p class="muted">Each category has a default firm; the account can still pick a different firm per entry.</p>
-            <div class="table-scroll"><table><thead><tr><th>Category</th><th>Default firm</th><th class="t-right"></th></tr></thead>
-              <tbody>${cats.map(c => `<tr>
-                <td><b>${U.esc(c.label)}</b></td>
-                <td><select data-ecbiz="${U.esc(c.key)}">${Store.BUSINESS_ORDER.map(b => `<option value="${b}"${c.business === b ? ' selected' : ''}>${U.esc(Store.BUSINESSES[b].name)}</option>`).join('')}</select></td>
-                <td class="t-right"><button class="btn sm danger" data-ecdel="${U.esc(c.key)}">Delete</button></td></tr>`).join('')}</tbody></table></div>
-            <div class="flex gap wrap" style="margin-top:12px">
-              <input id="ecName" placeholder="New category name" style="flex:1"/>
-              <select id="ecNewBiz">${Store.BUSINESS_ORDER.map(b => `<option value="${b}">${U.esc(Store.BUSINESSES[b].name)}</option>`).join('')}</select>
-              <button class="btn primary" id="ecAdd">＋ Add</button>
-            </div>
-          </div>
-          <div class="modal-foot"><button class="btn" id="ecDone">Done</button></div>
-        </div></div>`;
-      const close = () => { root.innerHTML = ''; expenses(); };
-      $('#ecClose', root).onclick = close; $('#ecDone', root).onclick = close;
-      $('#ecBackdrop', root).onclick = e => { if (e.target.id === 'ecBackdrop') close(); };
-      $('#ecAdd', root).onclick = async () => {
-        try { await Store.addExpenseCat($('#ecName', root).value, $('#ecNewBiz', root).value); U.toast('Category added', 'success'); render(); }
-        catch (e) { U.toast(e.message, 'error'); }
-      };
-      $$('[data-ecbiz]', root).forEach(sel => sel.onchange = async () => { await Store.renameExpenseCat(sel.dataset.ecbiz, null, sel.value); U.toast('Updated', 'success'); });
-      $$('[data-ecdel]', root).forEach(b => b.onclick = async () => {
-        if (!confirm('Delete this category? Existing expense records keep their saved category name.')) return;
-        await Store.removeExpenseCat(b.dataset.ecdel); U.toast('Deleted', 'success'); render();
-      });
-    }
-    render();
-  }
-
-  let expItemsFilter = '';
-  function expenseItemsModal() {
-    const root = document.getElementById('modalRoot');
-    function render() {
-      const q = expItemsFilter.trim().toLowerCase();
-      const all = Store.expenseItems();
-      const items = q ? all.filter(x => x.toLowerCase().includes(q)) : all;
-      root.innerHTML = `
-        <div class="modal-backdrop" id="eiBackdrop"><div class="modal">
-          <div class="modal-head"><h3>Sub-categories (bill items)</h3><button class="x-close" id="eiClose">&times;</button></div>
-          <div class="modal-body">
-            <div class="flex gap wrap" style="margin-bottom:10px">
-              <input id="eiNew" placeholder="New sub-category" style="flex:1"/>
-              <button class="btn primary" id="eiAdd">＋ Add</button>
-            </div>
-            <input id="eiSearch" type="search" placeholder="Search ${all.length} sub-categories…" value="${U.esc(expItemsFilter)}" style="width:100%;margin-bottom:8px"/>
-            <div class="table-scroll" style="max-height:46vh"><table><tbody>
-              ${items.map(x => `<tr><td>${U.esc(x)}</td><td class="t-right"><button class="btn sm danger" data-eidel="${U.esc(x)}">Delete</button></td></tr>`).join('') || '<tr><td class="empty">No match.</td></tr>'}
-            </tbody></table></div>
-          </div>
-          <div class="modal-foot"><span class="muted" style="margin-right:auto">${items.length} of ${all.length}</span><button class="btn" id="eiDone">Done</button></div>
-        </div></div>`;
-      const close = () => { root.innerHTML = ''; expenses(); };
-      $('#eiClose', root).onclick = close; $('#eiDone', root).onclick = close;
-      $('#eiBackdrop', root).onclick = e => { if (e.target.id === 'eiBackdrop') close(); };
-      $('#eiAdd', root).onclick = async () => {
-        try { await Store.addExpenseItem($('#eiNew', root).value); U.toast('Added', 'success'); expItemsFilter = ''; render(); }
-        catch (e) { U.toast(e.message, 'error'); }
-      };
-      $('#eiSearch', root).oninput = U.debounce(e => { expItemsFilter = e.target.value; render(); const s = $('#eiSearch', root); if (s) { s.focus(); s.setSelectionRange(s.value.length, s.value.length); } }, 200);
-      $$('[data-eidel]', root).forEach(b => b.onclick = async () => {
-        await Store.removeExpenseItem(b.dataset.eidel); U.toast('Deleted', 'success'); render();
-      });
-    }
-    render();
-  }
-
-  w.Views = { dashboard, students, studentDetail, businessDashboard, collect, collections, expenses, reports, attendance, attReport, marks, academics, users, data, openPaymentModal, changePassword };
+  w.Views = { dashboard, students, studentDetail, businessDashboard, collect, collections, reports, attendance, attReport, marks, academics, users, data, openPaymentModal, changePassword };
 })(window);
